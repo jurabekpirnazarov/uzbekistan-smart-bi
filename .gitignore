@@ -1,0 +1,33 @@
+# Secrets / environments
+.env
+.venv/
+venv/
+
+# Data (raw downloads are reproducible with pipelines/siat_ingest.py)
+data/raw/
+data/siat.db
+data/processed/
+
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+.pytest_cache/
+.ruff_cache/
+.mypy_cache/
+build/
+dist/
+
+# Node
+node_modules/
+frontend/dist/
+
+# Misc
+mlruns/
+backups/
+.DS_Store
+Thumbs.db
+
+# Portable PostgreSQL + its data (local, no-Docker mode)
+.tools/
+*.tsbuildinfo

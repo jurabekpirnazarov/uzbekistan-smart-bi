@@ -1,0 +1,27 @@
+# Tool configuration for the whole repository. The installable backend package is in backend/pyproject.toml.
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+pythonpath = [".", "backend"]
+addopts = "-q"
+
+[tool.ruff]
+target-version = "py311"
+line-length = 120
+extend-exclude = ["frontend", "backend/alembic/versions"]
+
+[tool.ruff.lint]
+select = ["E", "F", "W", "I", "B", "UP"]
+
+[tool.ruff.lint.isort]
+known-first-party = ["app", "pipelines", "mcp_server", "ml", "agents", "rag"]
+
+[tool.ruff.lint.flake8-bugbear]
+extend-immutable-calls = ["typer.Argument", "typer.Option"]
+
+[tool.ruff.lint.per-file-ignores]
+# Verified asset from PLAN.md — do not restyle it.
+"pipelines/siat_ingest.py" = ["ALL"]
+
+[tool.ruff.format]
+exclude = ["pipelines/siat_ingest.py"]

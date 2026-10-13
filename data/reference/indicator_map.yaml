@@ -1,0 +1,259 @@
+# SIAT dataset → internal indicator code (PLAN.md Appendix A).
+# Downstream code uses only these internal codes, never raw SIAT dataset ids.
+# New indicator = new entry here + `python manage.py ingest --local`. No code changes.
+#
+# unit_multiplier converts the source unit to the stored unit (people, UZS, units).
+# additive: values may be summed across territories. Growth rates (% of previous year) are never summed.
+#
+# Not mapped yet (kept raw): quarterly region datasets 1582, 1588, 1589, 1777, 1780 and
+# national deflators 1820, 1825 — they need the cumulative-vs-discrete check from PLAN.md Phase 1.
+
+indicators:
+  # --- population (district / region / country) ---
+  population_total:
+    siat_dataset_id: 246
+    name_en: Permanent population, total
+    category: population
+    source_unit: thousand people
+    unit: persons
+    unit_multiplier: 1000
+    additive: true
+    higher_is_better: true
+  population_urban:
+    siat_dataset_id: 248
+    name_en: Permanent population, urban
+    category: population
+    source_unit: thousand people
+    unit: persons
+    unit_multiplier: 1000
+    additive: true
+    higher_is_better: true
+  population_rural:
+    siat_dataset_id: 247
+    name_en: Permanent population, rural
+    category: population
+    source_unit: thousand people
+    unit: persons
+    unit_multiplier: 1000
+    additive: true
+    higher_is_better: true
+
+  # --- business activity ---
+  enterprises_active:
+    siat_dataset_id: 2044
+    name_en: Operating business entities
+    category: business
+    source_unit: units
+    unit: units
+    unit_multiplier: 1
+    additive: true
+    higher_is_better: true
+  enterprises_registered:
+    siat_dataset_id: 2046
+    name_en: Registered business entities
+    category: business
+    source_unit: units
+    unit: units
+    unit_multiplier: 1
+    additive: true
+    higher_is_better: true
+  enterprises_new:
+    siat_dataset_id: 2049
+    name_en: Newly created business entities
+    category: business
+    source_unit: units
+    unit: units
+    unit_multiplier: 1
+    additive: true
+    higher_is_better: true
+
+  # --- market services ---
+  market_services_volume:
+    siat_dataset_id: 4482
+    name_en: Market services, volume
+    category: services
+    source_unit: bln UZS
+    unit: UZS
+    unit_multiplier: 1.0e+9
+    additive: true
+    higher_is_better: true
+  market_services_growth:
+    siat_dataset_id: 4483
+    name_en: Market services, growth (% of previous year)
+    category: services
+    source_unit: "% of previous year"
+    unit: "% of previous year"
+    unit_multiplier: 1
+    additive: false
+    higher_is_better: true
+  market_services_per_capita:
+    siat_dataset_id: 3414
+    name_en: Market services per capita
+    category: services
+    source_unit: thsd UZS
+    unit: UZS
+    unit_multiplier: 1000
+    additive: false
+    higher_is_better: true
+  trade_services_volume:
+    siat_dataset_id: 4464
+    name_en: Trade services, volume
+    category: services
+    source_unit: bln UZS
+    unit: UZS
+    unit_multiplier: 1.0e+9
+    additive: true
+    higher_is_better: true
+  trade_services_growth:
+    siat_dataset_id: 4465
+    name_en: Trade services, growth (% of previous year)
+    category: services
+    source_unit: "% of previous year"
+    unit: "% of previous year"
+    unit_multiplier: 1
+    additive: false
+    higher_is_better: true
+  food_services_volume:
+    siat_dataset_id: 4462
+    name_en: Accommodation & food services, volume
+    category: services
+    source_unit: bln UZS
+    unit: UZS
+    unit_multiplier: 1.0e+9
+    additive: true
+    higher_is_better: true
+  food_services_growth:
+    siat_dataset_id: 4463
+    name_en: Accommodation & food services, growth (% of previous year)
+    category: services
+    source_unit: "% of previous year"
+    unit: "% of previous year"
+    unit_multiplier: 1
+    additive: false
+    higher_is_better: true
+  health_services_volume:
+    siat_dataset_id: 4470
+    name_en: Healthcare services, volume
+    category: services
+    source_unit: bln UZS
+    unit: UZS
+    unit_multiplier: 1.0e+9
+    additive: true
+    higher_is_better: true
+  health_services_growth:
+    siat_dataset_id: 4471
+    name_en: Healthcare services, growth (% of previous year)
+    category: services
+    source_unit: "% of previous year"
+    unit: "% of previous year"
+    unit_multiplier: 1
+    additive: false
+    higher_is_better: true
+  education_services_volume:
+    siat_dataset_id: 4468
+    name_en: Education services, volume
+    category: services
+    source_unit: bln UZS
+    unit: UZS
+    unit_multiplier: 1.0e+9
+    additive: true
+    higher_is_better: true
+  education_services_growth:
+    siat_dataset_id: 4469
+    name_en: Education services, growth (% of previous year)
+    category: services
+    source_unit: "% of previous year"
+    unit: "% of previous year"
+    unit_multiplier: 1
+    additive: false
+    higher_is_better: true
+  transport_services_volume:
+    siat_dataset_id: 4460
+    name_en: Transport services, volume
+    category: services
+    source_unit: bln UZS
+    unit: UZS
+    unit_multiplier: 1.0e+9
+    additive: true
+    higher_is_better: true
+  transport_services_growth:
+    siat_dataset_id: 4461
+    name_en: Transport services, growth (% of previous year)
+    category: services
+    source_unit: "% of previous year"
+    unit: "% of previous year"
+    unit_multiplier: 1
+    additive: false
+    higher_is_better: true
+
+  # --- health facilities ---
+  hospitals:
+    siat_dataset_id: 1418
+    name_en: Hospitals
+    category: health
+    source_unit: units
+    unit: units
+    unit_multiplier: 1
+    additive: true
+    higher_is_better: true
+  outpatient_clinics:
+    siat_dataset_id: 1362
+    name_en: Outpatient clinics
+    category: health
+    source_unit: units
+    unit: units
+    unit_multiplier: 1
+    additive: true
+    higher_is_better: true
+
+  # --- region level only ---
+  small_business_share_gva:
+    siat_dataset_id: 1840
+    name_en: Small business share of GVA
+    category: economy
+    source_unit: "% of GVA"
+    unit: "%"
+    unit_multiplier: 1
+    additive: false
+    higher_is_better: true
+  population_urban_women:
+    siat_dataset_id: 4116
+    name_en: Urban population, women
+    category: population
+    source_unit: thousand people
+    unit: persons
+    unit_multiplier: 1000
+    additive: true
+    higher_is_better: true
+  population_rural_women:
+    siat_dataset_id: 4117
+    name_en: Rural population, women
+    category: population
+    source_unit: thousand people
+    unit: persons
+    unit_multiplier: 1000
+    additive: true
+    higher_is_better: true
+  population_urban_men:
+    siat_dataset_id: 4118
+    name_en: Urban population, men
+    category: population
+    source_unit: thousand people
+    unit: persons
+    unit_multiplier: 1000
+    additive: true
+    higher_is_better: true
+  population_rural_men:
+    siat_dataset_id: 4119
+    name_en: Rural population, men
+    category: population
+    source_unit: thousand people
+    unit: persons
+    unit_multiplier: 1000
+    additive: true
+    higher_is_better: true
+
+# Reference datasets: used to build lookup tables, not stored as indicators.
+reference:
+  district_kind:
+    siat_dataset_id: 307   # value 1 = district (tuman), 0 = city

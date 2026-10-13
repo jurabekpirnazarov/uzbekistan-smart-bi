@@ -1,0 +1,127 @@
+name: sbi
+
+x-backend-env: &backend-env
+  DATABASE_URL: postgresql+psycopg://${POSTGRES_USER}:${POSTGRES_PASSWORD}@db:5432/${POSTGRES_DB}
+  VECTOR_DB_URL: postgresql+psycopg://${POSTGRES_USER}:${POSTGRES_PASSWORD}@db:5432/${POSTGRES_DB}
+  OPENAI_API_KEY: ${OPENAI_API_KEY:-}
+  OPENAI_MODEL: ${OPENAI_MODEL:-gpt-4.1-mini}
+  OPENAI_EMBED_MODEL: ${OPENAI_EMBED_MODEL:-text-embedding-3-small}
+  MAPBOX_TOKEN: ${MAPBOX_TOKEN:-}
+  DATA_MODE: ${DATA_MODE:-official}
+  MLFLOW_TRACKING_URI: http://mlflow:5000
+  OTEL_ENABLED: ${OTEL_ENABLED:-false}
+  LOG_LEVEL: ${LOG_LEVEL:-INFO}
+
+services:
+  db:
+    build: ./db
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+      POSTGRES_DB: ${POSTGRES_DB}
+    ports: ["5432:5432"]
+    volumes: [pgdata:/var/lib/postgresql/data]
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER} -d ${POSTGRES_DB}"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+
+  backend:
+    build: {context: ., dockerfile: backend/Dockerfile}
+    environment: *backend-env
+    ports: ["8000:8000"]
+    volumes: [./data:/app/data]
+    depends_on:
+      db: {condition: service_healthy}
+
+  mcp:
+    build: {context: ., dockerfile: mcp_server/Dockerfile}
+    environment: *backend-env
+    ports: ["8100:8100"]
+    depends_on:
+      db: {condition: service_healthy}
+
+  # Batch jobs (ingest / features / train / eval): `docker compose run --rm worker <command>`.
+  # It is in the "jobs" profile so `docker compose up` does not start an idle container.
+  worker:
+    build: {context: ., dockerfile: backend/Dockerfile}
+    environment: *backend-env
+    volumes: [./data:/app/data]
+    profiles: [jobs]
+    command: ["python", "manage.py", "--help"]
+    depends_on:
+      db: {condition: service_healthy}
+
+  frontend:
+    build: ./frontend
+    ports: ["5173:80"]
+    depends_on:
+      backend: {condition: service_healthy}
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://localhost/"]
+      interval: 10s
+      timeout: 5s
+      retries: 6
+
+  prometheus:
+    image: prom/prometheus:v2.55.1
+    ports: ["9090:9090"]
+    volumes: [./monitoring/prometheus:/etc/prometheus:ro]
+    command: ["--config.file=/etc/prometheus/prometheus.yml", "--web.enable-lifecycle"]
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://localhost:9090/-/healthy"]
+      interval: 10s
+      timeout: 5s
+      retries: 6
+
+  grafana:
+    image: grafana/grafana:11.3.1
+    ports: ["3000:3000"]
+    environment:
+      GF_SECURITY_ADMIN_USER: ${GRAFANA_ADMIN_USER:-admin}
+      GF_SECURITY_ADMIN_PASSWORD: ${GRAFANA_ADMIN_PASSWORD:-admin}
+      POSTGRES_USER: ${POSTGRES_USER}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+      POSTGRES_DB: ${POSTGRES_DB}
+    volumes:
+      - grafana_data:/var/lib/grafana
+      - ./monitoring/grafana/provisioning:/etc/grafana/provisioning:ro
+      - ./monitoring/grafana/dashboards:/var/lib/grafana/dashboards:ro
+    depends_on:
+      prometheus: {condition: service_healthy}
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://localhost:3000/api/health"]
+      interval: 10s
+      timeout: 5s
+      retries: 6
+
+  mlflow:
+    build: ./monitoring/mlflow
+    ports: ["5000:5000"]
+    command: >
+      mlflow server --host 0.0.0.0 --port 5000
+      --backend-store-uri postgresql://${POSTGRES_USER}:${POSTGRES_PASSWORD}@db:5432/mlflow
+      --artifacts-destination /mlflow/artifacts
+    volumes: [mlflow_artifacts:/mlflow/artifacts]
+    depends_on:
+      db: {condition: service_healthy}
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:5000/health', timeout=4)"]
+      interval: 10s
+      timeout: 5s
+      retries: 12
+      start_period: 20s
+
+  postgres-exporter:
+    image: prometheuscommunity/postgres-exporter:v0.16.0
+    environment:
+      DATA_SOURCE_NAME: postgresql://${POSTGRES_USER}:${POSTGRES_PASSWORD}@db:5432/${POSTGRES_DB}?sslmode=disable
+    ports: ["9187:9187"]
+    depends_on:
+      db: {condition: service_healthy}
+
+volumes:
+  pgdata:
+  grafana_data:
+  mlflow_artifacts:
