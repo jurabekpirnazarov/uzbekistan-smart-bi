@@ -400,6 +400,94 @@ def demo(
     )
 
 
+# --- scheduled data refresh --------------------------------------------------------------
+
+TASK_NAME = "Uzbekistan Smart BI - data refresh"
+
+
+@app.command()
+def refresh(
+    force: bool = typer.Option(False, help="recompute features/forecasts even if SIAT has no new data"),
+    trigger: str = typer.Option("manual", help="manual | schedule (recorded in pipeline_runs)"),
+) -> None:
+    """Download new SIAT data and rebuild what depends on it (features, forecasts, RAG, monitoring)."""
+    if PG_BIN.exists():
+        db_start()  # scheduled runs may start before the app
+    job(["pipelines/refresh.py", "--trigger", trigger] + (["--force"] if force else []), local=True)
+
+
+@app.command()
+def scheduler() -> None:
+    """Run forever, refreshing every REFRESH_EVERY_DAYS at REFRESH_AT (for servers / the Docker service)."""
+    job(["pipelines/scheduler.py"], local=True)
+
+
+def _settings_value(key: str, default: str) -> str:
+    env = ROOT / ".env"
+    if env.exists():
+        for line in env.read_text(encoding="utf-8").splitlines():
+            if line.strip().startswith(f"{key}="):
+                return line.split("=", 1)[1].strip() or default
+    return os.environ.get(key, default)
+
+
+@app.command()
+def schedule(
+    every_days: int = typer.Option(None, help="days between refreshes (default REFRESH_EVERY_DAYS from .env, 3)"),
+    at: str = typer.Option(None, help="local time HH:MM (default REFRESH_AT from .env, 03:00)"),
+    remove: bool = typer.Option(False, "--remove", help="delete the scheduled task"),
+    status: bool = typer.Option(False, "--status", help="show the scheduled task"),
+) -> None:
+    """Windows: register `manage.py refresh` in Task Scheduler for the current user (no admin needed)."""
+    if sys.platform != "win32":
+        typer.secho(
+            "On Linux/macOS use the Docker `scheduler` service or cron, e.g.\n"
+            f"  0 3 */3 * *  cd {ROOT} && {PY} manage.py refresh --trigger schedule",
+            fg=typer.colors.YELLOW,
+        )
+        raise typer.Exit(0)
+    ps = ["powershell", "-NoProfile", "-NonInteractive", "-Command"]
+    if remove:
+        run([*ps, f"Unregister-ScheduledTask -TaskName '{TASK_NAME}' -Confirm:$false"], check=False)
+        return
+    if status:
+        run(
+            [
+                *ps,
+                f"$t = Get-ScheduledTask -TaskName '{TASK_NAME}' -ErrorAction SilentlyContinue; "
+                "if (-not $t) { 'No scheduled refresh task.' } else { "
+                f"$i = Get-ScheduledTaskInfo -TaskName '{TASK_NAME}'; "
+                "'State: ' + $t.State; "
+                # 267011 = SCHED_S_TASK_HAS_NOT_RUN
+                "if ($i.LastTaskResult -eq 267011) { 'Last run: never' } "
+                "else { 'Last run: ' + $i.LastRunTime + ' (result ' + $i.LastTaskResult + ')' }; "
+                "'Next run: ' + $i.NextRunTime }",
+            ],
+            check=False,
+        )
+        return
+    days = every_days or int(_settings_value("REFRESH_EVERY_DAYS", "3"))
+    time_at = at or _settings_value("REFRESH_AT", "03:00")
+    # StartWhenAvailable: if the computer was off at the scheduled time, run as soon as it is on again.
+    script = (
+        f"$a = New-ScheduledTaskAction -Execute '{PY}' -Argument 'manage.py refresh --trigger schedule' "
+        f"-WorkingDirectory '{ROOT}'; "
+        f"$t = New-ScheduledTaskTrigger -Daily -DaysInterval {days} -At '{time_at}'; "
+        "$s = New-ScheduledTaskSettingsSet -StartWhenAvailable -DontStopIfGoingOnBatteries "
+        "-AllowStartIfOnBatteries -ExecutionTimeLimit (New-TimeSpan -Hours 3) -MultipleInstances IgnoreNew; "
+        f"Register-ScheduledTask -TaskName '{TASK_NAME}' -Action $a -Trigger $t -Settings $s "
+        "-Description 'Downloads new SIAT data and rebuilds features, forecasts and the RAG index' -Force | Out-Null; "
+        f"(Get-ScheduledTaskInfo -TaskName '{TASK_NAME}').NextRunTime"
+    )
+    run([*ps, script])
+    typer.secho(
+        f"Scheduled: refresh every {days} day(s) at {time_at} (task '{TASK_NAME}'). "
+        "Runs while you are logged in; a missed run starts when the computer is back on.\n"
+        "Check: python manage.py schedule --status   Remove: python manage.py schedule --remove",
+        fg=typer.colors.GREEN,
+    )
+
+
 @app.command()
 def backup() -> None:
     """pg_dump of the sbi database into ./backups (custom format)."""

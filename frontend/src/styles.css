@@ -201,6 +201,7 @@ table.compact tr.alert-row td { color: var(--pomegranate); font-weight: 600; }
 .excluded { margin-top: 12px; font-size: 0.85rem; }
 
 /* --- monitoring ------------------------------------------------------------ */
+.pipeline-card { margin-bottom: 16px; }
 .mon-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(420px, 100%), 1fr)); gap: 16px; }
 .checks { list-style: none; padding: 0; margin: 10px 0; display: flex; flex-direction: column; gap: 4px; font-size: 0.88rem; }
 .checks .ok { color: var(--turquoise); }

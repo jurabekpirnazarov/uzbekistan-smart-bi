@@ -27,6 +27,7 @@ Three layers:
 | `user_feedback_total` | counter | rating | 👍 / 👎 |
 | `ingestion_runs_total`, `ingestion_rows_total` | gauge (batch) | source, status / result | loader runs and rows |
 | `data_last_update_timestamp` | gauge (batch) | source | freshness (alert after 45 days) |
+| `pipeline_last_success_timestamp`, `pipeline_runs_total` | gauge (batch) | — / status | scheduled refresh health (alert after 7 days without success) |
 | `data_quality_check_passed` | gauge (batch) | check | 1 = pass (see below) |
 | `data_missing_ratio` | gauge (batch) | indicator | missing district-year cells |
 | `model_backtest_smape` | gauge (batch) | indicator, level, model | selected model's backtest error |

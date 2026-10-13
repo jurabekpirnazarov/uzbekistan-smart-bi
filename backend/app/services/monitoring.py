@@ -17,6 +17,7 @@ from app.db.models import (
     ModelMetric,
     MonitorMetric,
     Observation,
+    PipelineRun,
     Prediction,
     Recommendation,
 )
@@ -37,7 +38,46 @@ def latest_batch_metrics() -> dict[str, list[dict]]:
         for m in _latest_snapshot(db):
             if m.value is not None:
                 out.setdefault(m.name, []).append({"labels": m.labels or {}, "value": m.value})
+        last_ok = db.scalar(
+            select(func.max(PipelineRun.finished_at)).where(PipelineRun.status.in_(["ok", "no_change"]))
+        )
+        if last_ok is not None:
+            out["pipeline_last_success_timestamp"] = [{"labels": {}, "value": last_ok.timestamp()}]
+        for status, n in db.execute(select(PipelineRun.status, func.count()).group_by(PipelineRun.status)).all():
+            out.setdefault("pipeline_runs_total", []).append({"labels": {"status": status}, "value": float(n)})
         return out
+
+
+def _next_slot(last: datetime, every_days: int, at: str) -> datetime:
+    """Same rule as pipelines/scheduler.py: `every_days` after the last success, at the HH:MM slot (local time)."""
+    hh, mm = (int(x) for x in at.split(":"))
+    return (last.astimezone() + timedelta(days=every_days)).replace(hour=hh, minute=mm, second=0, microsecond=0)
+
+
+def pipeline_status(db: Session) -> dict:
+    """Scheduled refresh: recent runs and when the next one is due."""
+    from app.core.config import get_settings
+
+    s = get_settings()
+    runs = db.scalars(select(PipelineRun).order_by(PipelineRun.started_at.desc()).limit(10)).all()
+    last_ok = next((r for r in runs if r.status in ("ok", "no_change") and r.finished_at), None)
+    return {
+        "every_days": s.refresh_every_days,
+        "at": s.refresh_at,
+        "next_due_after": _next_slot(last_ok.finished_at, s.refresh_every_days, s.refresh_at) if last_ok else None,
+        "runs": [
+            {
+                "started_at": r.started_at,
+                "finished_at": r.finished_at,
+                "trigger": r.trigger,
+                "status": r.status,
+                "datasets_changed": r.datasets_changed or [],
+                "steps": r.steps or [],
+                "error": r.error,
+            }
+            for r in runs
+        ],
+    }
 
 
 def data_health(db: Session) -> dict:
@@ -74,6 +114,7 @@ def data_health(db: Session) -> dict:
             key=lambda x: -(x["ratio"] or 0),
         ),
         "snapshot_at": snap[0].created_at if snap else None,
+        "pipeline": pipeline_status(db),
     }
 
 

@@ -58,10 +58,16 @@ With Docker: `docker compose up -d --build` then `docker compose run --rm worker
 | http://localhost:5000 | MLflow (forecast training and evaluation runs) |
 | http://localhost:3000 · :9090 | Grafana · Prometheus (Docker stack) |
 
+## Automatic data refresh
+
+`python manage.py schedule` downloads new SIAT data every 3 days at 03:00 (Windows Task Scheduler; the
+Docker stack has a `scheduler` service) and rebuilds features, forecasts and the search index only when
+something changed. Runs are listed on the Monitoring page. See [docs/runbook.md](docs/runbook.md).
+
 ## Commands
 
 ```powershell
-python manage.py dev | demo | ingest | seed | features | train | monitor | eval
+python manage.py dev | demo | refresh | schedule | ingest | seed | features | train | monitor | eval
 python manage.py test | lint | backup | restore | db-start | db-stop
 cd frontend ; npm run e2e      # Playwright end-to-end tests (needs `python manage.py dev` running)
 ```
@@ -74,7 +80,7 @@ cd frontend ; npm run e2e      # Playwright end-to-end tests (needs `python mana
 | | |
 |---|---|
 | [Architecture](docs/architecture.md) | components, data flow, agent sequence, deployment (Mermaid) |
-| [Data dictionary](docs/data_dictionary.md) | indicators, units, tables, traceability |
+| [Data dictionary](docs/data_dictionary.md) · [Schema](docs/schema.md) | indicators, units, tables (ER diagram), traceability |
 | [Features](docs/features.md) | every feature: formula and business meaning |
 | [Scoring](docs/scoring.md) | Business Opportunity Score method and limitations |
 | [API](docs/api.md) · [MCP](docs/mcp.md) | endpoints, SSE events, MCP tools and how to connect |

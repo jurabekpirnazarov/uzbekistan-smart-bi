@@ -12,6 +12,11 @@ groups:
         for: 1h
         labels: {severity: warning}
         annotations: {summary: "Official data is older than 45 days"}
+      - alert: RefreshOverdue
+        expr: time() - pipeline_last_success_timestamp > 7 * 86400
+        for: 1h
+        labels: {severity: warning}
+        annotations: {summary: "No successful data refresh for more than 7 days"}
       - alert: DataQualityCheckFailed
         expr: min(data_quality_check_passed) < 1
         for: 5m

@@ -44,11 +44,30 @@ docker compose run --rm worker python manage.py demo
 App http://localhost:8080 · API http://localhost:8000/docs · Grafana http://localhost:3000 ·
 Prometheus http://localhost:9090 · MLflow http://localhost:5000 · MCP http://localhost:8100/mcp
 
+## Automatic data refresh
+
+`python manage.py refresh` downloads new SIAT data and rebuilds what depends on it:
+
+download (only datasets whose SIAT catalog date changed) → migrate → load (idempotent upsert) →
+*if any dataset content changed:* features → forecasts → RAG index → monitoring.
+
+Every run is stored in `pipeline_runs` (shown on the Monitoring page) and logged to `logs/refresh-YYYYMMDD.log`;
+a lock file prevents parallel runs. `--force` recomputes even without new data.
+
+| Where | How it is scheduled |
+|---|---|
+| This Windows machine | `python manage.py schedule` registers the task *Uzbekistan Smart BI - data refresh* in Windows Task Scheduler for the current user (no admin). Default: every 3 days at 03:00 (`REFRESH_EVERY_DAYS`, `REFRESH_AT` in `.env`, or `--every-days 2 --at 04:30`). A run missed while the computer was off starts when it is back on. `--status` shows the next run, `--remove` deletes the task. |
+| Docker / server | The `scheduler` service runs `python manage.py scheduler`: it computes the next run from the last successful run in `pipeline_runs`, so container restarts do not cause extra downloads. |
+| Linux without Docker | cron: `0 3 */3 * * cd /path/to/repo && .venv/bin/python manage.py refresh --trigger schedule` |
+
+Alert `RefreshOverdue` fires when no refresh succeeded for 7 days.
+
 ## Everyday tasks
 
 | Task | Command |
 |---|---|
-| Refresh official data from SIAT | `python manage.py ingest --local` |
+| Refresh everything now (download → rebuild) | `python manage.py refresh` |
+| Download + load only | `python manage.py ingest --local` |
 | Rebuild geography + RAG index | `python manage.py seed --local` |
 | Recompute features | `python manage.py features --local` |
 | Retrain forecasts | `python manage.py train --local` |

@@ -53,6 +53,20 @@ services:
     depends_on:
       db: {condition: service_healthy}
 
+  # Downloads new SIAT data every REFRESH_EVERY_DAYS at REFRESH_AT and rebuilds features, forecasts, RAG.
+  scheduler:
+    build: {context: ., dockerfile: backend/Dockerfile}
+    environment:
+      <<: *backend-env
+      REFRESH_EVERY_DAYS: ${REFRESH_EVERY_DAYS:-3}
+      REFRESH_AT: ${REFRESH_AT:-03:00}
+      TZ: Asia/Tashkent
+    volumes: [./data:/app/data, ./logs:/app/logs]
+    command: ["python", "manage.py", "scheduler"]
+    restart: unless-stopped
+    depends_on:
+      db: {condition: service_healthy}
+
   frontend:
     build: ./frontend
     ports: ["8080:80"]  # 5173/5174 are left free for local Vite dev servers

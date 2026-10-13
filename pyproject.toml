@@ -27,6 +27,7 @@ extend-immutable-calls = ["typer.Argument", "typer.Option"]
 # Markdown report and PromQL dashboard templates.
 "ml/evaluation/run_all.py" = ["E501"]
 "monitoring/grafana/build_dashboards.py" = ["E501"]
+"backend/app/db/schema_doc.py" = ["E501"]
 
 [tool.ruff.format]
 exclude = ["pipelines/siat_ingest.py"]

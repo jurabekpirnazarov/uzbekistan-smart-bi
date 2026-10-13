@@ -241,6 +241,24 @@ export interface MonitoringData {
   quality_checks: { check: string; passed: boolean }[];
   missing_ratio: { indicator: string; ratio: number }[];
   snapshot_at: string | null;
+  pipeline: PipelineStatus;
+}
+
+export interface PipelineRunRow {
+  started_at: string;
+  finished_at: string | null;
+  trigger: string;
+  status: "running" | "ok" | "no_change" | "failed";
+  datasets_changed: number[];
+  steps: { name: string; status: string; seconds: number; reason?: string }[];
+  error: string | null;
+}
+
+export interface PipelineStatus {
+  every_days: number;
+  at: string;
+  next_due_after: string | null;
+  runs: PipelineRunRow[];
 }
 
 export interface LeaderboardRow {

@@ -92,7 +92,9 @@ def upsert(conn: Connection, model: type, rows: list[dict], key: list[str]) -> N
     for i in range(0, len(rows), chunk):
         stmt = insert(table).values(rows[i : i + chunk])
         skip = {*key, "id", "ingested_at"}
-        update_cols = {c.name: stmt.excluded[c.name] for c in table.columns if c.name not in skip}
+        # Only overwrite the columns this loader provides: columns owned by other pipelines
+        # (e.g. centroids / geom_approx from load_reference.py) must survive a reload.
+        update_cols = {c: stmt.excluded[c] for c in rows[0] if c not in skip}
         conn.execute(stmt.on_conflict_do_update(index_elements=key, set_=update_cols))
 
 

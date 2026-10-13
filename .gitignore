@@ -29,6 +29,7 @@ frontend/playwright-report/
 # Misc
 mlruns/
 backups/
+logs/
 .DS_Store
 Thumbs.db
 

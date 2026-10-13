@@ -30,6 +30,8 @@ billions). Growth datasets ("% of previous year", 100 = no change) are stored as
 
 ## Tables
 
+Full column-level schema with an ER diagram: [schema.md](schema.md) (generated from the models).
+
 | Table | Contents | Written by |
 |---|---|---|
 | `data_sources` | source name, URL, licence, retrieval time | `pipelines/load_siat.py` |
@@ -45,6 +47,7 @@ billions). Growth datasets ("% of previous year", 100 = no change) are stored as
 | `feedback` | 👍 / 👎 with optional comment | `app/services/feedback.py` |
 | `rag_chunks` | documentation chunks, full-text vector `tsv`, optional embedding | `rag/ingest.py` |
 | `monitor_metrics` | batch metric snapshots exported as Prometheus gauges | `monitoring/drift.py` |
+| `pipeline_runs` | each data refresh: trigger, status, changed SIAT datasets, step timings, error | `pipelines/refresh.py` |
 
 ## Traceability
 

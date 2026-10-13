@@ -8,6 +8,12 @@ import {
 } from "../api/client";
 
 const fmtDate = (s: string | null | undefined) => (s ? new Date(s).toLocaleString("en-GB", { dateStyle: "medium", timeStyle: "short" }) : "—");
+const STATUS_LABEL: Record<string, string> = {
+  ok: "✓ updated",
+  no_change: "✓ no new data",
+  failed: "✕ failed",
+  running: "… running",
+};
 const ms = (v: number | null) => (v == null ? "—" : v >= 1000 ? `${(v / 1000).toFixed(1)} s` : `${Math.round(v)} ms`);
 
 export function MonitoringPage() {
@@ -74,6 +80,52 @@ export function MonitoringPage() {
           sub="in AI answers"
           bad={(agent?.verification_failures ?? 0) > 0}
         />
+      </section>
+
+      <section className="card pipeline-card">
+        <div className="card-head">
+          <div>
+            <h2>Data refresh pipeline</h2>
+            <p className="muted small">
+              Every {data?.pipeline.every_days ?? "—"} day(s) at {data?.pipeline.at ?? "—"} · next run after{" "}
+              {fmtDate(data?.pipeline.next_due_after)} · run now with <code>python manage.py refresh</code>
+            </p>
+          </div>
+        </div>
+        <div className="table-scroll">
+          <table className="compact">
+            <thead>
+              <tr>
+                <th scope="col">Started</th>
+                <th scope="col">Trigger</th>
+                <th scope="col">Status</th>
+                <th scope="col">New SIAT datasets</th>
+                <th scope="col">Steps</th>
+              </tr>
+            </thead>
+            <tbody>
+              {data?.pipeline.runs.length ? (
+                data.pipeline.runs.map((r) => (
+                  <tr key={r.started_at} className={r.status === "failed" ? "alert-row" : ""}>
+                    <td>{fmtDate(r.started_at)}</td>
+                    <td>{r.trigger}</td>
+                    <td title={r.error ?? ""}>{STATUS_LABEL[r.status] ?? r.status}</td>
+                    <td>{r.datasets_changed.length ? r.datasets_changed.join(", ") : "none"}</td>
+                    <td className="muted">
+                      {r.steps.map((s) => `${s.name}${s.status === "ok" ? "" : ` (${s.status})`}`).join(" → ")}
+                    </td>
+                  </tr>
+                ))
+              ) : (
+                <tr>
+                  <td colSpan={5} className="muted">
+                    No runs yet.
+                  </td>
+                </tr>
+              )}
+            </tbody>
+          </table>
+        </div>
       </section>
 
       <div className="mon-grid">

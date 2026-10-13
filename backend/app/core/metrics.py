@@ -53,6 +53,8 @@ DB_GAUGES: dict[str, tuple[str, list[str]]] = {
     "ingestion_runs_total": ("Ingestion runs by status (from ingestion_runs)", ["source", "status"]),
     "ingestion_rows_total": ("Rows loaded/rejected by the last ingestion", ["source", "result"]),
     "data_last_update_timestamp": ("Unix time of the latest retrieved observation", ["source"]),
+    "pipeline_last_success_timestamp": ("Unix time of the last successful scheduled/manual refresh", []),
+    "pipeline_runs_total": ("Refresh pipeline runs by status", ["status"]),
     "data_quality_check_passed": ("1 if a data-quality check passed", ["check"]),
     "data_missing_ratio": ("Share of expected district-year cells that are missing", ["indicator"]),
     "model_backtest_smape": ("Backtest sMAPE of the selected model", ["indicator", "level", "model"]),

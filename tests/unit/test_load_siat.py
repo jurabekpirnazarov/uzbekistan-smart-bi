@@ -71,3 +71,22 @@ def test_unit_conversion_and_filtering() -> None:
 )
 def test_district_kind(value: float | None, name: str, kind: str) -> None:
     assert district_kind(value, name) == kind
+
+
+def test_upsert_only_updates_provided_columns() -> None:
+    """Regression: a reload must not reset columns owned by other pipelines (district centroids)."""
+    from sqlalchemy.dialects import postgresql
+
+    from app.db.models import District
+    from pipelines import load_siat
+
+    captured = []
+
+    class Conn:
+        def execute(self, stmt):  # noqa: ANN001, ANN202
+            captured.append(str(stmt.compile(dialect=postgresql.dialect())))
+
+    rows = [{"soato_code": "1", "region_id": 1, "name_en": "A", "name_uz": None, "name_ru": None, "kind": "city"}]
+    load_siat.upsert(Conn(), District, rows, ["soato_code"])
+    set_clause = captured[0].split("DO UPDATE SET", 1)[1]
+    assert "name_en" in set_clause and "centroid_lat" not in set_clause and "geom_approx" not in set_clause
