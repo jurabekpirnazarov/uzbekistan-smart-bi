@@ -4,6 +4,12 @@ import react from "@vitejs/plugin-react";
 // In dev, /api and /health are proxied to the backend running on the host.
 export default defineConfig({
   plugins: [react()],
+  build: {
+    rollupOptions: {
+      output: { manualChunks: { maplibre: ["maplibre-gl"], charts: ["recharts"], markdown: ["react-markdown", "remark-gfm"] } },
+    },
+    chunkSizeWarningLimit: 1100,
+  },
   server: {
     port: 5174, // 5173 is used by another local app; docker serves the built UI on 5173
     proxy: {

@@ -1,0 +1,10 @@
+soato_code,name_en,name_uz,kind,region_soato,best_score,centroid_source
+1710240,Kukdala district,Ko‘kdala tumani,district,1710,66.9,manual
+1712412,Gazgan city,G‘ozg‘on shahri,city,1712,62.7,manual
+1714401365,Davlatabad district,Davlatobod tumani,district,1714,56.7,parent_city
+1714401367,Yangi Namangan district,Yangi Namangan tumani,district,1714,80.0,parent_city
+1722203,Bandykhan district,Bandixon tumani,district,1722,70.0,manual
+1726292,Yangikhayot district,Yangihayot tumani,district,1726,65.0,manual
+1733221,Tuprakkala district,Tuproqqal’a tumani,district,1733,53.2,manual
+1735209,Bozatau district,Bo‘zatov tumani,district,1735,56.7,manual
+1735228,Takhiatash district,Taxiatosh tumani,district,1735,55.6,manual

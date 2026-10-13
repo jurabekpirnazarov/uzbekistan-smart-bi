@@ -3,22 +3,31 @@
 Rules enforced here (CLAUDE.md):
 - The LLM never computes numbers: every figure (values, shares, growth, CAGR, comparisons) comes from a tool.
 - No invented statistics: when tools return nothing, the model must say data is insufficient.
-- Answers separate "Official statistics" from "AI interpretation" and cite SIAT sources.
+- Answers separate "Official statistics" / "Model prediction" / "AI interpretation" and cite SIAT sources.
+- Every number in the final answer is checked against tool results (app.services.verify).
+- Without OPENAI_API_KEY the rule-based planner in app.services.agent_fallback answers instead.
+- Every run is logged to agent_runs / agent_tool_calls and to Prometheus metrics.
 """
 
 from __future__ import annotations
 
 import json
+import time
+import uuid
 from collections.abc import Callable, Iterator
 from typing import Any
 
 from openai import OpenAI
 from sqlalchemy.orm import Session
 
+from app.core import metrics
 from app.core.config import get_settings
 from app.core.logging import get_logger
+from app.db.models import AgentRun, AgentToolCall
 from app.db.session import get_sessionmaker
+from app.services import agent_fallback, documents, forecasts, recommendations
 from app.services import statistics as stats
+from app.services.verify import verify_answer
 
 log = get_logger("chat")
 
@@ -33,14 +42,22 @@ STRICT RULES
 1. Never invent or compute numbers yourself. Every number you write must come from a tool result
    (values, ranks, shares, growth rates, CAGR, differences). If you need a change or comparison, call
    `compute_change` or `compare_territories`. Rounding a tool number for readability is fine.
+   Never subtract, add or divide values of different territories yourself (no "X more people than Y",
+   no "N times larger"): show both official values side by side and let the reader compare. An answer
+   checker flags every number that does not appear in a tool result.
 2. If the tools return no data for the question, say exactly: "{insufficient}" (translated into the user's
    language) and explain what data is missing. Never fill gaps with general knowledge numbers.
 3. Reply in the user's language (Uzbek, Russian or English) — match the language of the last user message.
    For Uzbek use Latin script.
-4. Structure every analytical answer with these sections (translated headings):
-   **Official statistics** — the figures from tools, with year and unit.
+4. Structure every analytical answer with these sections (translated headings), keeping the layers separate:
+   **Official statistics** — ONLY observed values from statistics tools (rankings, time series, comparisons),
+     with year and unit. Never put scores or forecasts here.
+   **Model prediction** — only when you used `calculate_business_score` or `forecast_indicator`: scores,
+     rank ranges, factor contributions, forecasts with their 80% interval and model name. Say these are model
+     outputs, not statistics. The raw factor values inside a score breakdown (population, spending, …) are
+     official statistics and may be quoted in the first section with their year.
    **AI interpretation** — your reasoning, clearly labelled as interpretation, not fact.
-   **Sources** — SIAT dataset ids/links from the tool `meta`.
+   **Sources** — SIAT dataset ids/links from the tool `meta` / `sources`.
    Short factual questions may use a compact form, but always name the year and source.
 5. Units: values are already converted — persons (not thousands), UZS (not billions). Present large numbers
    readably (e.g. "4.38 million people", "397.4 trillion UZS"). Growth indicators named "...growth"
@@ -49,8 +66,14 @@ STRICT RULES
 7. Use markdown: short paragraphs, bullet lists, and small tables for rankings.
 8. Method: for "fastest growing / grew most / o'sish / рост" questions ALWAYS call `get_growth_ranking`
    (it ranks every territory by growth in one call) — never pick territories by size first.
-   Use the latest available year unless the user names one. For "best place to open X" questions,
-   look at size (population), growth, and the relevant sector volume/per-capita values, then compare.
+   Use the latest available year unless the user names one.
+9. For "where should I open X / best place for X" questions call `calculate_business_score` (business types:
+   {business_types}). Show the top results with score, rank range and the 2–3 largest factor contributions,
+   and always include this disclaimer in the user's language: "{disclaimer}". If the user mentions a budget,
+   pass it as budget_uzs and report the budget warning if there is one.
+10. For future values call `forecast_indicator`; for methodology / definitions call `retrieve_documents` and cite
+   the document titles. To resolve a place name to a SOATO code call `find_territory`.
+11. If a result has is_synthetic=true, label it "DEMO / SYNTHETIC DATA — not official statistics".
 
 DATA CATALOGUE (internal indicator codes — use these in tool calls)
 {indicators}
@@ -176,6 +199,69 @@ TOOLS: list[dict[str, Any]] = [
             "parameters": {"type": "object", "properties": {}},
         },
     },
+    {
+        "type": "function",
+        "function": {
+            "name": "find_territory",
+            "description": "Resolve a place name (English, Uzbek or Russian) to region/district SOATO codes.",
+            "parameters": {
+                "type": "object",
+                "properties": {"query": {"type": "string"}},
+                "required": ["query"],
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "calculate_business_score",
+            "description": "Business Opportunity Score (analytical model): ranks districts (of a region, or "
+            "nationwide) for a business type, with factor breakdown, rank range and coverage.",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "business_type": {"type": "string"},
+                    "region": {"type": "string", "description": "region SOATO; omit for all districts nationwide"},
+                    "level": {"type": "string", "enum": ["region", "district"], "description": "default district"},
+                    "target": {"type": "string", "enum": ["high_growth", "stable_demand", "low_competition"]},
+                    "budget_uzs": {"type": "integer"},
+                    "limit": {"type": "integer", "description": "results to return (default 5)"},
+                },
+                "required": ["business_type"],
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "forecast_indicator",
+            "description": "Model forecast (1–3 years) with 80%/95% intervals and backtest error, for "
+            "population_total, enterprises_active, enterprises_new and services volumes.",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "indicator": {"type": "string"},
+                    "level": {"type": "string", "enum": ["country", "region", "district"]},
+                    "soato": {"type": "string"},
+                    "horizon": {"type": "integer", "description": "1–3, default 3"},
+                },
+                "required": ["indicator", "level", "soato"],
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "retrieve_documents",
+            "description": "Search SIAT methodology, indicator definitions and project documentation "
+            "(scoring method, features, limitations). Returns cited snippets.",
+            "parameters": {
+                "type": "object",
+                "properties": {"query": {"type": "string"}, "k": {"type": "integer"}},
+                "required": ["query"],
+            },
+        },
+    },
 ]
 
 TOOL_LABELS = {
@@ -186,6 +272,10 @@ TOOL_LABELS = {
     "compare_territories": "Comparing territories",
     "list_districts": "Listing districts",
     "get_overview": "Loading national KPIs",
+    "find_territory": "Finding the territory",
+    "calculate_business_score": "Scoring locations",
+    "forecast_indicator": "Forecasting",
+    "retrieve_documents": "Searching methodology",
 }
 
 
@@ -378,6 +468,49 @@ def tool_get_overview(db: Session) -> dict:
     }
 
 
+def tool_find_territory(db: Session, query: str) -> dict:
+    matches = stats.find_territory(db, query, limit=5)
+    if not matches:
+        return {"error": "not_found", "message": f"No territory matches '{query}'"}
+    return {"query": query, "matches": [m.model_dump() for m in matches]}
+
+
+def tool_calculate_business_score(
+    db: Session,
+    business_type: str,
+    region: str | None = None,
+    level: str | None = None,
+    target: str | None = None,
+    budget_uzs: int | None = None,
+    limit: int = 5,
+) -> dict:
+    req = recommendations.RecommendRequest(
+        business_type=business_type,
+        region=region,
+        level=level,  # type: ignore[arg-type]
+        target=target,  # type: ignore[arg-type]
+        budget_uzs=budget_uzs,
+        limit=max(1, min(limit or 5, 15)),
+    )
+    res = recommendations.recommend(db, req)
+    for r in res["results"]:  # keep the context small: one source list per factor is enough
+        for b in r["breakdown"]:
+            b["sources"] = [{"dataset_id": x["dataset_id"], "url": x["url"]} for x in b["sources"][:2]]
+    res["excluded_insufficient_data"] = [e["entity"]["name"] for e in res["excluded_insufficient_data"]]
+    return res
+
+
+def tool_forecast_indicator(db: Session, indicator: str, level: str, soato: str, horizon: int = 3) -> dict:
+    f = forecasts.get_forecast(db, indicator, level, soato, max(1, min(horizon or 3, 3)))
+    out = f.model_dump(mode="json")
+    out["history"] = out["history"][-6:]
+    return out
+
+
+def tool_retrieve_documents(db: Session, query: str, k: int = 4) -> dict:
+    return documents.retrieve_documents(db, query, k)
+
+
 TOOL_FUNCS: dict[str, Callable[..., dict]] = {
     "get_ranking": tool_get_ranking,
     "get_timeseries": tool_get_timeseries,
@@ -386,6 +519,10 @@ TOOL_FUNCS: dict[str, Callable[..., dict]] = {
     "compare_territories": tool_compare_territories,
     "list_districts": tool_list_districts,
     "get_overview": tool_get_overview,
+    "find_territory": tool_find_territory,
+    "calculate_business_score": tool_calculate_business_score,
+    "forecast_indicator": tool_forecast_indicator,
+    "retrieve_documents": tool_retrieve_documents,
 }
 
 
@@ -397,7 +534,7 @@ def run_tool(db: Session, name: str, args: dict) -> dict:
         return fn(db, **args)
     except stats.NotFoundError as e:
         return {"error": "not_found", "message": str(e)}
-    except TypeError as e:
+    except (TypeError, ValueError) as e:
         return {"error": "bad_arguments", "message": str(e)}
 
 
@@ -419,9 +556,19 @@ UZ_MARKERS = (
     "bo'yicha",
     "ochish",
     "qil",
-    "ber",
     "haqida",
     "yil",
+    "qancha",
+    "shahri",
+    "shahar",
+    "aholi",
+    "bo‘ladi",
+    "bo'ladi",
+    "kerak",
+    "yaxshi",
+    "qayer",
+    "korxona",
+    "nima",
 )
 LANG_NAMES = {"uz": "Uzbek (Latin script)", "ru": "Russian", "en": "English"}
 
@@ -443,23 +590,181 @@ def build_system_prompt(db: Session) -> str:
         for i in stats.list_indicators(db)
     )
     regs = "\n".join(f"- {r.soato}: {r.name_en} / {r.name_uz}" for r in stats.list_regions(db))
-    return SYSTEM_PROMPT.format(insufficient=INSUFFICIENT, indicators=inds, regions=regs)
+    bts = ", ".join(b.business_type for b in recommendations.list_business_types())
+    return SYSTEM_PROMPT.format(
+        insufficient=INSUFFICIENT,
+        indicators=inds,
+        regions=regs,
+        business_types=bts,
+        disclaimer=recommendations.engine.DISCLAIMER,
+    )
 
 
 # --- streaming agent loop --------------------------------------------------------------------
 
+# USD per 1M tokens (input, output) for the cost estimate; unknown models use the mini price.
+PRICES = {
+    "gpt-4.1-mini": (0.40, 1.60),
+    "gpt-4.1": (2.00, 8.00),
+    "gpt-4.1-nano": (0.10, 0.40),
+    "gpt-4o-mini": (0.15, 0.60),
+    "gpt-4o": (2.50, 10.00),
+    "gpt-5": (1.25, 10.00),
+    "gpt-5-mini": (0.25, 2.00),
+}
+
 
 def sse(event: str, data: Any) -> str:
-    return f"event: {event}\ndata: {json.dumps(data, ensure_ascii=False)}\n\n"
+    return f"event: {event}\ndata: {json.dumps(data, ensure_ascii=False, default=str)}\n\n"
+
+
+def map_focus(calls: list[tuple[str, dict, dict]]) -> dict | None:
+    """Territories the answer is about, for the map (last tool with territories wins)."""
+    for name, _, res in reversed(calls):
+        if "error" in res:
+            continue
+        if name == "calculate_business_score":
+            items = [r["entity"] for r in res.get("results", [])[:5]]
+            return {
+                "level": res["scope"]["level"],
+                "soatos": [e["soato"] for e in items],
+                "region": res["scope"].get("region_soato"),
+            }
+        if name in ("get_ranking", "get_growth_ranking"):
+            return {"level": res["level"], "soatos": [i["soato"] for i in res.get("items", [])[:5]]}
+        if name == "forecast_indicator" and res.get("level") != "country":
+            return {"level": res["level"], "soatos": [res["soato"]]}
+        if name == "compare_territories":
+            return {"level": res["level"], "soatos": [k for k in res.get("territories", {}) if not k.startswith("_")]}
+    return None
+
+
+class RunLog:
+    """Collects one agent run and writes it to agent_runs / agent_tool_calls + Prometheus."""
+
+    def __init__(self, question: str, lang: str, mode: str, model: str | None) -> None:
+        self.t0 = time.perf_counter()
+        self.request_id = uuid.uuid4().hex
+        self.question, self.lang, self.mode, self.model = question, lang, mode, model
+        self.intent: str | None = None
+        self.calls: list[tuple[str, dict, dict]] = []
+        self.call_ms: list[int] = []
+        self.tokens_in = self.tokens_out = 0
+        self.answer = ""
+        self.status = "ok"
+        self.unsupported: list[str] = []
+
+    def tool(self, db: Session, name: str, args: dict) -> dict:
+        t = time.perf_counter()
+        result = run_tool(db, name, args)
+        dt = time.perf_counter() - t
+        ok = "error" not in result
+        self.calls.append((name, args, result))
+        self.call_ms.append(int(dt * 1000))
+        metrics.AGENT_TOOL_CALLS.labels(name, "ok" if ok else "error").inc()
+        metrics.AGENT_TOOL_LATENCY.labels(name).observe(dt)
+        return result
+
+    def finish(self, db: Session) -> None:
+        latency = time.perf_counter() - self.t0
+        cost = 0.0
+        if self.model:
+            pin, pout = PRICES.get(self.model, PRICES["gpt-4.1-mini"])
+            cost = (self.tokens_in * pin + self.tokens_out * pout) / 1e6
+            metrics.AGENT_TOKENS.labels("input", self.model).inc(self.tokens_in)
+            metrics.AGENT_TOKENS.labels("output", self.model).inc(self.tokens_out)
+            metrics.AGENT_COST.labels(self.model).inc(cost)
+        if self.unsupported:
+            metrics.AGENT_VERIFICATION_FAILURES.inc(len(self.unsupported))
+        if self.status == "ok" and INSUFFICIENT[:30] in self.answer:
+            self.status = "insufficient"
+        metrics.AGENT_REQUESTS.labels(self.intent or "llm", self.status, self.lang).inc()
+        metrics.AGENT_LATENCY.labels(self.mode).observe(latency)
+        try:
+            run = AgentRun(
+                request_id=self.request_id,
+                question=self.question[:4000],
+                lang=self.lang,
+                intent=self.intent,
+                mode=self.mode,
+                model=self.model,
+                status=self.status,
+                latency_ms=int(latency * 1000),
+                tokens_in=self.tokens_in,
+                tokens_out=self.tokens_out,
+                cost_usd=cost,
+                tool_count=len(self.calls),
+                verification_failures=len(self.unsupported),
+                answer=self.answer[:20000],
+            )
+            db.add(run)
+            db.flush()
+            for (name, args, res), ms in zip(self.calls, self.call_ms, strict=True):
+                db.add(AgentToolCall(run_id=run.id, name=name, args=args, ok="error" not in res, latency_ms=ms))
+            db.commit()
+        except Exception as e:  # logging must never break the chat
+            db.rollback()
+            log.warning("agent_run_log_failed", error=type(e).__name__)
+
+
+def _final_events(run: RunLog, question: str) -> Iterator[str]:
+    v = verify_answer(run.answer, [r for _, _, r in run.calls], question)
+    run.unsupported = v["unsupported"]
+    yield sse("verification", v)
+    focus = map_focus(run.calls)
+    reco = next((r for n, _, r in reversed(run.calls) if n == "calculate_business_score" and "error" not in r), None)
+    yield sse(
+        "result",
+        {
+            "request_id": run.request_id,
+            "map_focus": focus,
+            "recommendation": {"business_type": reco["business_type"], "region": reco["scope"].get("region_soato")}
+            if reco
+            else None,
+            "is_synthetic": any(
+                isinstance(r, dict) and (r.get("data_mode") == "demo" or r.get("meta", {}).get("is_synthetic"))
+                for _, _, r in run.calls
+            ),
+        },
+    )
+
+
+def stream_fallback(messages: list[dict[str, str]]) -> Iterator[str]:
+    """Rule-based agent: intent → fixed plan → tools → templated answer (no LLM)."""
+    question = next((m["content"] for m in reversed(messages) if m.get("role") == "user"), "")
+    lang = detect_language(question)
+    run = RunLog(question, lang, "fallback", None)
+    with get_sessionmaker()() as db:
+        try:
+            it = agent_fallback.parse_intent(db, question, lang)
+            run.intent = it.intent
+            for name, args in agent_fallback.plan(db, it):
+                yield sse("tool_call", {"name": name, "label": TOOL_LABELS.get(name, name), "args": args})
+                res = run.tool(db, name, args)
+                yield sse("tool_result", {"name": name, "ok": "error" not in res})
+            run.answer = agent_fallback.render(it, run.calls)
+            for line in run.answer.splitlines(keepends=True):
+                yield sse("token", {"text": line})
+            yield from _final_events(run, question)
+            yield sse("done", {"tools": [c[0] for c in run.calls], "mode": "fallback"})
+        except Exception as e:
+            run.status = "error"
+            log.warning("fallback_error", error=type(e).__name__, detail=str(e)[:200])
+            yield sse("error", {"message": f"Agent error: {type(e).__name__}."})
+        finally:
+            run.finish(db)
 
 
 def stream_chat(messages: list[dict[str, str]]) -> Iterator[str]:
-    """Yield SSE events: tool_call, tool_result, token, done, error."""
+    """Yield SSE events: tool_call, tool_result, token, verification, result, done, error."""
     settings = get_settings()
     if not settings.openai_api_key:
-        yield sse("error", {"message": "OPENAI_API_KEY is not set — add it to .env to enable the AI analyst."})
+        yield from stream_fallback(messages)
         return
     client = OpenAI(api_key=settings.openai_api_key)
+    last_user = next((m["content"] for m in reversed(messages) if m.get("role") == "user"), "")
+    lang_code = detect_language(last_user)
+    run = RunLog(last_user, lang_code, "llm", settings.openai_model)
 
     with get_sessionmaker()() as db:
         convo: list[dict[str, Any]] = [{"role": "system", "content": build_system_prompt(db)}]
@@ -468,10 +773,8 @@ def stream_chat(messages: list[dict[str, str]]) -> Iterator[str]:
             for m in messages[-20:]
             if m.get("role") in ("user", "assistant") and m.get("content")
         ]
-        last_user = next((m["content"] for m in reversed(messages) if m.get("role") == "user"), "")
-        lang = LANG_NAMES[detect_language(last_user)]
+        lang = LANG_NAMES[lang_code]
         convo.append({"role": "system", "content": f"Write the whole answer in {lang}, including section headings."})
-        tools_used: list[str] = []
         try:
             for _ in range(MAX_TOOL_ROUNDS + 1):
                 stream = client.chat.completions.create(
@@ -480,9 +783,13 @@ def stream_chat(messages: list[dict[str, str]]) -> Iterator[str]:
                     tools=TOOLS,
                     temperature=0.2,
                     stream=True,
+                    stream_options={"include_usage": True},
                 )
                 content, calls = "", {}
                 for chunk in stream:
+                    if getattr(chunk, "usage", None):
+                        run.tokens_in += chunk.usage.prompt_tokens or 0
+                        run.tokens_out += chunk.usage.completion_tokens or 0
                     if not chunk.choices:
                         continue
                     delta = chunk.choices[0].delta
@@ -497,6 +804,7 @@ def stream_chat(messages: list[dict[str, str]]) -> Iterator[str]:
                         if tc.function and tc.function.arguments:
                             c["arguments"] += tc.function.arguments
                 if not calls:
+                    run.answer += content
                     break
                 convo.append(
                     {
@@ -520,8 +828,7 @@ def stream_chat(messages: list[dict[str, str]]) -> Iterator[str]:
                     yield sse(
                         "tool_call", {"name": c["name"], "label": TOOL_LABELS.get(c["name"], c["name"]), "args": args}
                     )
-                    result = run_tool(db, c["name"], args)
-                    tools_used.append(c["name"])
+                    result = run.tool(db, c["name"], args)
                     yield sse("tool_result", {"name": c["name"], "ok": "error" not in result})
                     convo.append(
                         {
@@ -532,8 +839,13 @@ def stream_chat(messages: list[dict[str, str]]) -> Iterator[str]:
                     )
             else:
                 yield sse("token", {"text": "\n\n_(Stopped: too many tool calls.)_"})
-            log.info("chat_done", tools=tools_used)
-            yield sse("done", {"tools": tools_used})
+            run.intent = run.calls[-1][0] if run.calls else "chat"
+            yield from _final_events(run, last_user)
+            log.info("chat_done", tools=[c[0] for c in run.calls], unsupported=len(run.unsupported))
+            yield sse("done", {"tools": [c[0] for c in run.calls], "mode": "llm"})
         except Exception as e:  # surface API errors to the UI without leaking secrets
+            run.status = "error"
             log.warning("chat_error", error=type(e).__name__)
             yield sse("error", {"message": f"AI service error: {type(e).__name__}. Please try again."})
+        finally:
+            run.finish(db)

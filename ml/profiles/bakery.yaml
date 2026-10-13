@@ -1,0 +1,16 @@
+business_type: bakery
+display_name: {en: Bakery, uz: Novvoyxona, ru: Пекарня}
+keywords: [bakery, bread, novvoy, "non ", пекарн, хлеб]
+min_budget_uzs: 150_000_000
+default_level: district
+factors:
+  - {feature: population,               weight: 0.25, direction: "+", label: Large population}
+  - {feature: population_growth,        weight: 0.15, direction: "+", label: Growing population}
+  - {feature: food_services_per_capita, weight: 0.15, direction: "+", label: Food-service spending}
+  - {feature: food_services_growth,     weight: 0.15, direction: "+", label: Food-service growth}
+  - {feature: business_density,         weight: 0.10, direction: "-", label: Low competition}
+  - {feature: urbanization,             weight: 0.10, direction: "+", label: Urban demand}
+  - {feature: new_business_rate,        weight: 0.10, direction: "+", label: Business dynamism}
+normalization: percentile
+optional_factors:
+  - {feature: forecast_population_growth, weight: 0.10, direction: "+", label: Forecast population growth, enabled: false}

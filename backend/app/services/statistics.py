@@ -5,6 +5,7 @@ All numbers are computed here (never by an LLM) and every response carries sourc
 
 from __future__ import annotations
 
+import re
 from datetime import datetime
 from typing import Literal
 
@@ -349,3 +350,123 @@ def get_overview(db: Session) -> Overview:
             retrieved_at=max((r for *_, r in src if r), default=None),
         ),
     )
+
+
+# --- territory lookup and comparison ------------------------------------------------------------
+
+_NAME_NOISE = re.compile(
+    r"\b(region|province|district|city|republic of|viloyati|viloyat|tumani|tuman|shahri|shahar|"
+    r"область|обл|район|город|г|respublikasi|республика)\b"
+)
+
+
+def _name_key(s: str) -> str:
+    s = s.lower().translate(str.maketrans("‘’ʻʼ`´", "''''''")).replace("'", "")
+    s = _NAME_NOISE.sub(" ", s)
+    return re.sub(r"[^\w]+", "", s)
+
+
+class TerritoryMatch(BaseModel):
+    level: Level
+    soato: str
+    name: str
+    region_soato: str | None
+    score: float
+
+
+def find_territory(db: Session, query: str, level: Level | None = None, limit: int = 5) -> list[TerritoryMatch]:
+    """Fuzzy match a territory by SOATO or name in English, Uzbek or Russian (best first)."""
+    from rapidfuzz import fuzz
+
+    q = query.strip()
+    if q in ("1700", "uzbekistan", "Uzbekistan", "O‘zbekiston", "Узбекистан"):
+        return [
+            TerritoryMatch(level="country", soato="1700", name="Republic of Uzbekistan", region_soato=None, score=100)
+        ]
+    cands: list[tuple[Level, str, str, str | None, list[str | None]]] = []
+    if level in (None, "region"):
+        for r in db.scalars(select(Region)).all():
+            cands.append(("region", r.soato_code, r.name_en, r.soato_code, [r.name_en, r.name_uz, r.name_ru]))
+    if level in (None, "district"):
+        rows = db.execute(select(District, Region.soato_code).join(Region, Region.id == District.region_id)).all()
+        for d, rs in rows:
+            cands.append(("district", d.soato_code, d.name_en, rs, [d.name_en, d.name_uz, d.name_ru]))
+    exact = [c for c in cands if c[1] == q]
+    if exact:
+        c = exact[0]
+        return [TerritoryMatch(level=c[0], soato=c[1], name=c[2], region_soato=c[3], score=100)]
+    key = _name_key(q)
+    if not key:
+        return []
+    scored = []
+    for lv, soato, name, rs, names in cands:
+        s = max(fuzz.ratio(key, _name_key(n)) for n in names if n)
+        # "Fergana" alone means the region more often than the district of the same name
+        s += 2 if lv == "region" else 0
+        # "Fergana city" should prefer the city over the region/district
+        if any(w in q.lower() for w in ("city", "shahri", "shahar", "город")) and "city" in name.lower():
+            s += 5
+        scored.append((s, lv, soato, name, rs))
+    scored.sort(key=lambda x: -x[0])
+    return [
+        TerritoryMatch(level=lv, soato=soato, name=name, region_soato=rs, score=round(min(s, 100), 1))
+        for s, lv, soato, name, rs in scored[:limit]
+        if s >= 70
+    ]
+
+
+def level_of(soato: str) -> Level:
+    return "country" if soato == "1700" else "region" if len(soato) == 4 else "district"
+
+
+class ComparisonRow(BaseModel):
+    soato: str
+    name: str
+    level: Level
+    value: float | None
+    rank: str | None
+    per_1000_people: float | None
+
+
+class Comparison(BaseModel):
+    indicator: str
+    year: int
+    rows: list[ComparisonRow]
+    meta: Meta
+
+
+def compare(db: Session, indicator: str, entities: list[str], year: int | None = None) -> Comparison:
+    """Side-by-side values of one indicator; per-1,000-people values for additive non-population indicators."""
+    ind = _indicator(db, indicator)
+    if not entities:
+        raise NotFoundError("No entities given")
+    rows: list[ComparisonRow] = []
+    used_year: int | None = year
+    for lv in ("region", "district"):
+        wanted = [e for e in entities if level_of(e) == lv]
+        if not wanted:
+            continue
+        r = get_ranking(db, indicator, lv, year)  # type: ignore[arg-type]
+        used_year = r.year
+        pop = {}
+        if ind.additive and ind.unit != "persons":
+            try:
+                pop = {i.soato: i.value for i in get_ranking(db, "population_total", lv, r.year).items}  # type: ignore[arg-type]
+            except NotFoundError:
+                pop = {}
+        by = {i.soato: i for i in r.items}
+        for e in wanted:
+            it = by.get(e)
+            rows.append(
+                ComparisonRow(
+                    soato=e,
+                    name=it.name if it else e,
+                    level=lv,
+                    value=it.value if it else None,
+                    rank=f"{it.rank}/{len(r.items)}" if it else None,
+                    per_1000_people=round(it.value / pop[e] * 1000, 4) if it and pop.get(e) else None,
+                )
+            )
+    if used_year is None:
+        raise NotFoundError("Only region / district SOATO codes can be compared")
+    return Comparison(indicator=indicator, year=used_year, rows=rows, meta=_meta(db, ind, str(used_year)))

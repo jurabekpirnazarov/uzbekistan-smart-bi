@@ -22,6 +22,11 @@ extend-immutable-calls = ["typer.Argument", "typer.Option"]
 [tool.ruff.lint.per-file-ignores]
 # Verified asset from PLAN.md — do not restyle it.
 "pipelines/siat_ingest.py" = ["ALL"]
+# Multilingual keyword tables and markdown answer templates read better unwrapped.
+"backend/app/services/agent_fallback.py" = ["E501"]
+# Markdown report and PromQL dashboard templates.
+"ml/evaluation/run_all.py" = ["E501"]
+"monitoring/grafana/build_dashboards.py" = ["E501"]
 
 [tool.ruff.format]
 exclude = ["pipelines/siat_ingest.py"]

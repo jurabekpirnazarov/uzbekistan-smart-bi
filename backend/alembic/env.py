@@ -20,8 +20,17 @@ target_metadata = Base.metadata
 EXTENSION_TABLES = {"spatial_ref_sys", "geometry_columns", "geography_columns"}
 
 
+# Columns managed by raw SQL (PostGIS geometry, full-text tsvector) — not mapped in the ORM.
+RAW_SQL_COLUMNS = {"geom", "tsv"}
+RAW_SQL_INDEXES = {"ix_regions_geom", "ix_districts_geom", "ix_rag_chunks_tsv"}
+
+
 def include_object(obj, name, type_, reflected, compare_to):  # noqa: ANN001
-    return not (type_ == "table" and name in EXTENSION_TABLES)
+    if type_ == "table" and name in EXTENSION_TABLES:
+        return False
+    if type_ == "index" and name in RAW_SQL_INDEXES:
+        return False
+    return not (type_ == "column" and name in RAW_SQL_COLUMNS)
 
 
 def run_migrations_offline() -> None:

@@ -1,0 +1,15 @@
+# RAG evaluation (PLAN.md Phase 11): methodology question → document(s) that answer it.
+# hit@5 = an expected doc_id is among the top 5 chunks. 12 filled; TODO: extend to 20.
+questions:
+  - {q: "How is the permanent population defined?", expect: ["siat:246"]}
+  - {q: "What counts as urban population?", expect: ["siat:248"]}
+  - {q: "Rural population methodology", expect: ["siat:247"]}
+  - {q: "Which business entities are counted as operating?", expect: ["siat:2044"]}
+  - {q: "Newly created business entities definition", expect: ["siat:2049"]}
+  - {q: "Volume of market services by districts", expect: ["siat:4482"]}
+  - {q: "Accommodation and food services volume", expect: ["siat:4462"]}
+  - {q: "Number of outpatient clinics", expect: ["siat:1362"]}
+  - {q: "Number of hospitals by districts", expect: ["siat:1418"]}
+  - {q: "Which factors does the pharmacy score use?", expect: ["profile:pharmacy"]}
+  - {q: "How is the Business Opportunity Score calculated?", expect: ["doc:scoring"]}
+  - {q: "What are the known limitations of the data?", expect: ["doc:limitations"]}

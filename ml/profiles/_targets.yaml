@@ -1,0 +1,31 @@
+# Target presets (PLAN.md Phase 4 step 8): weight multipliers by factor tag; weights are renormalised to 1.
+# Tags are assigned to features below. Changing behaviour = editing this file, not code.
+feature_tags:
+  population: size
+  population_growth: growth
+  population_cagr_5y: growth
+  urbanization: demand
+  business_density: competition
+  new_business_rate: growth
+  business_growth: growth
+  services_per_capita: spending
+  trade_per_capita: spending
+  food_services_per_capita: spending
+  health_services_per_capita: spending
+  education_services_per_capita: spending
+  transport_services_per_capita: spending
+  trade_growth: growth
+  food_services_growth: growth
+  health_services_growth: growth
+  education_services_growth: growth
+  transport_services_growth: growth
+  clinics_per_10k: competition
+  hospitals_per_10k: competition
+  region_small_business_share: demand
+  region_grp_per_capita: demand
+  is_city: demand
+  forecast_population_growth: growth
+targets:
+  high_growth:     {growth: 1.8, size: 0.8, spending: 0.9, competition: 0.9, demand: 0.9}
+  stable_demand:   {size: 1.6, spending: 1.4, demand: 1.2, growth: 0.6, competition: 0.9}
+  low_competition: {competition: 2.2, size: 0.9, growth: 0.9, spending: 0.9, demand: 0.9}

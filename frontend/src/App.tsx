@@ -1,328 +1,121 @@
-import { useEffect, useMemo, useState } from "react";
-import {
-  api,
-  type HealthStatus,
-  type Indicator,
-  type Level,
-  type Overview,
-  type Ranking,
-  type Region,
-  type TimeSeries,
-} from "./api/client";
-import { ChatPanel } from "./components/ChatPanel";
-import { RankingChart } from "./components/RankingChart";
-import { TrendChart } from "./components/TrendChart";
-import { formatPct, formatValue, unitLabel } from "./format";
+import { createContext, useCallback, useContext, useEffect, useMemo, useState } from "react";
+import { BrowserRouter, NavLink, Route, Routes, useNavigate } from "react-router-dom";
+import { api, type HealthStatus, type MapFocus } from "./api/client";
+import { type AskRequest, ChatPanel } from "./components/ChatPanel";
+import { AnalyticsPage } from "./pages/AnalyticsPage";
+import { ForecastPage } from "./pages/ForecastPage";
+import { HomePage } from "./pages/HomePage";
+import { MapPage } from "./pages/MapPage";
+import { MonitoringPage } from "./pages/MonitoringPage";
+import { RecommendPage } from "./pages/RecommendPage";
 
-type Selected = { level: Level; soato: string };
+interface ChatApi {
+  ask: (question?: string) => void;
+  showOnMap: (focus: MapFocus) => void;
+}
 
-const CATEGORY_LABELS: Record<string, string> = {
-  population: "Population",
-  business: "Business activity",
-  services: "Market services",
-  health: "Health facilities",
-  economy: "Economy",
-};
+const ChatContext = createContext<ChatApi>({ ask: () => undefined, showOnMap: () => undefined });
+export const useChat = () => useContext(ChatContext);
+
+const NAV = [
+  { to: "/", label: "Home", end: true },
+  { to: "/map", label: "Map" },
+  { to: "/recommend", label: "Recommend" },
+  { to: "/analytics", label: "Analytics" },
+  { to: "/forecast", label: "Forecast" },
+  { to: "/monitoring", label: "Monitoring" },
+];
 
 export function App() {
+  return (
+    <BrowserRouter>
+      <Layout />
+    </BrowserRouter>
+  );
+}
+
+function Layout() {
+  const navigate = useNavigate();
   const [health, setHealth] = useState<HealthStatus | null>(null);
-  const [overview, setOverview] = useState<Overview | null>(null);
-  const [indicators, setIndicators] = useState<Indicator[]>([]);
-  const [regions, setRegions] = useState<Region[]>([]);
-  const [error, setError] = useState<string | null>(null);
-
-  const [indicator, setIndicator] = useState("population_total");
-  const [level, setLevel] = useState<"region" | "district">("region");
-  const [region, setRegion] = useState("");
-  const [year, setYear] = useState<number | undefined>(undefined);
-
-  const [ranking, setRanking] = useState<Ranking | null>(null);
-  const [loadingRanking, setLoadingRanking] = useState(false);
-  const [selected, setSelected] = useState<Selected>({ level: "country", soato: "1700" });
-  const [series, setSeries] = useState<TimeSeries | null>(null);
   // ?ask=... opens the AI analyst with that question (shareable question links)
-  const [initialAsk] = useState(() => new URLSearchParams(window.location.search).get("ask") ?? undefined);
-  const [chatOpen, setChatOpen] = useState(Boolean(initialAsk));
+  const [request, setRequest] = useState<AskRequest | null>(() => {
+    const q = new URLSearchParams(window.location.search).get("ask");
+    return q ? { id: 1, text: q } : null;
+  });
+  const [chatOpen, setChatOpen] = useState(Boolean(request));
 
-  // Initial load: health, KPIs, catalogue.
   useEffect(() => {
     api.health().then(setHealth).catch(() => setHealth(null));
-    Promise.all([api.overview(), api.indicators(), api.regions()])
-      .then(([o, i, r]) => {
-        setOverview(o);
-        setIndicators(i);
-        setRegions(r);
-      })
-      .catch((e: unknown) => setError(String(e)));
   }, []);
 
-  const current = indicators.find((i) => i.code === indicator);
-  const districtLevelAvailable = current?.levels.includes("district") ?? false;
-  const effectiveLevel = level === "district" && !districtLevelAvailable ? "region" : level;
-
-  // Ranking for the current selection.
-  useEffect(() => {
-    if (!indicators.length) return;
-    setLoadingRanking(true);
-    api
-      .ranking(indicator, effectiveLevel, year, effectiveLevel === "district" && region ? region : undefined)
-      .then((r) => {
-        setRanking(r);
-        setError(null);
-      })
-      .catch((e: unknown) => {
-        setRanking(null);
-        setError(String(e));
-      })
-      .finally(() => setLoadingRanking(false));
-  }, [indicator, effectiveLevel, region, year, indicators.length]);
-
-  // Trend for the selected territory (country by default).
-  useEffect(() => {
-    if (!indicators.length) return;
-    const lv = current?.levels.includes(selected.level) ? selected.level : "country";
-    const soato = lv === selected.level ? selected.soato : "1700";
-    api
-      .timeseries(indicator, lv, soato)
-      .then(setSeries)
-      .catch(() => setSeries(null));
-  }, [indicator, selected, indicators.length, current]);
-
-  const grouped = useMemo(() => {
-    const g: Record<string, Indicator[]> = {};
-    for (const i of indicators) (g[i.category] ??= []).push(i);
-    return g;
-  }, [indicators]);
-
-  const unit = current?.unit ?? "";
-  const source = ranking?.meta.sources[0];
+  const ask = useCallback((q?: string) => {
+    setRequest({ id: Date.now(), text: q });
+    setChatOpen(true);
+  }, []);
+  const showOnMap = useCallback(
+    (f: MapFocus) => {
+      const p = new URLSearchParams({ level: f.level, focus: f.soatos.join(",") });
+      if (f.region) p.set("region", f.region);
+      navigate(`/map?${p.toString()}`);
+    },
+    [navigate],
+  );
+  const ctx = useMemo(() => ({ ask, showOnMap }), [ask, showOnMap]);
 
   return (
-    <div className="app">
-      <header className="topbar">
-        <div>
-          <p className="eyebrow">Official SIAT statistics</p>
-          <h1>Uzbekistan Smart Business Intelligence</h1>
-        </div>
-        <div className="topbar-actions">
-          <StatusPill health={health} />
-          <button type="button" className="ask-btn" onClick={() => setChatOpen(true)}>
-            ✦ Ask AI analyst
-          </button>
-        </div>
-      </header>
-
-      {overview && (
-        <section className="kpis" aria-label="Key figures">
-          {overview.kpis.map((k) => (
-            <div className="kpi" key={k.indicator}>
-              <span className="kpi-label">
-                {k.label} · {k.year}
-              </span>
-              <span className="kpi-value">{formatValue(k.value, k.unit, true)}</span>
-              <span className={`kpi-change ${k.change_pct !== null && k.change_pct < 0 ? "neg" : "pos"}`}>
-                {formatPct(k.change_pct)} vs {k.year - 1}
-              </span>
-            </div>
-          ))}
-          <div className="kpi">
-            <span className="kpi-label">Territories</span>
-            <span className="kpi-value">{overview.regions} regions</span>
-            <span className="kpi-change muted">
-              {overview.districts} districts · {overview.cities} cities
+    <ChatContext.Provider value={ctx}>
+      <div className="shell">
+        <header className="topbar">
+          <NavLink to="/" className="brand" aria-label="Home">
+            <span className="brand-mark" aria-hidden="true">◆</span>
+            <span>
+              <span className="eyebrow">Official SIAT statistics</span>
+              <span className="brand-name">Uzbekistan Smart BI</span>
             </span>
-          </div>
-        </section>
-      )}
-
-      <section className="controls" aria-label="Filters">
-        <label>
-          Indicator
-          <select
-            value={indicator}
-            onChange={(e) => {
-              setIndicator(e.target.value);
-              setYear(undefined);
-            }}
-          >
-            {Object.entries(grouped).map(([cat, list]) => (
-              <optgroup key={cat} label={CATEGORY_LABELS[cat] ?? cat}>
-                {list.map((i) => (
-                  <option key={i.code} value={i.code}>
-                    {i.name_en}
-                  </option>
-                ))}
-              </optgroup>
+          </NavLink>
+          <nav className="nav" aria-label="Main">
+            {NAV.map((n) => (
+              <NavLink key={n.to} to={n.to} end={n.end} className={({ isActive }) => (isActive ? "active" : "")}>
+                {n.label}
+              </NavLink>
             ))}
-          </select>
-        </label>
-
-        <div className="segmented" role="group" aria-label="Level">
-          <button
-            type="button"
-            className={effectiveLevel === "region" ? "active" : ""}
-            onClick={() => setLevel("region")}
-          >
-            Regions
-          </button>
-          <button
-            type="button"
-            className={effectiveLevel === "district" ? "active" : ""}
-            disabled={!districtLevelAvailable}
-            title={districtLevelAvailable ? "" : "No district-level official data for this indicator"}
-            onClick={() => setLevel("district")}
-          >
-            Districts
-          </button>
-        </div>
-
-        {effectiveLevel === "district" && (
-          <label>
-            Region
-            <select value={region} onChange={(e) => setRegion(e.target.value)}>
-              <option value="">All regions</option>
-              {regions.map((r) => (
-                <option key={r.soato} value={r.soato}>
-                  {r.name_en}
-                </option>
-              ))}
-            </select>
-          </label>
-        )}
-
-        <label>
-          Year
-          <select
-            value={year ?? ranking?.year ?? ""}
-            onChange={(e) => setYear(Number(e.target.value))}
-            disabled={!ranking}
-          >
-            {(ranking?.years_available ?? []).map((y) => (
-              <option key={y} value={y}>
-                {y}
-              </option>
-            ))}
-          </select>
-        </label>
-      </section>
-
-      {error && <div className="alert">{error}</div>}
-
-      <main className="grid">
-        <section className="card ranking" aria-busy={loadingRanking}>
-          <div className="card-head">
-            <div>
-              <h2>{current?.name_en ?? "…"}</h2>
-              <p className="muted">
-                {ranking ? `${ranking.items.length} ${effectiveLevel === "region" ? "regions" : "territories"}` : ""}
-                {ranking ? ` · ${ranking.year} · ${unitLabel(unit)}` : ""}
-              </p>
-            </div>
-            {ranking?.total != null && (
-              <div className="total">
-                <span className="muted">Total</span>
-                <strong>{formatValue(ranking.total, unit, true)}</strong>
-              </div>
-            )}
+          </nav>
+          <div className="topbar-actions">
+            <StatusPill health={health} />
+            <button type="button" className="ask-btn" onClick={() => ask()}>
+              ✦ Ask AI analyst
+            </button>
           </div>
-          {ranking && (
-            <RankingChart
-              items={ranking.items.slice(0, 15)}
-              unit={unit}
-              selected={selected.level === effectiveLevel ? selected.soato : null}
-              onSelect={(soato) => setSelected({ level: effectiveLevel, soato })}
-            />
-          )}
-          {ranking && ranking.items.length > 15 && (
-            <p className="muted small">Chart shows the top 15. The table below lists all.</p>
-          )}
-        </section>
+        </header>
 
-        <section className="card trend">
-          <div className="card-head">
-            <div>
-              <h2>Trend · {series?.name ?? "…"}</h2>
-              <p className="muted">{series?.meta.period ?? ""}</p>
-            </div>
-            {selected.level !== "country" && (
-              <button type="button" className="link" onClick={() => setSelected({ level: "country", soato: "1700" })}>
-                Show national
-              </button>
-            )}
-          </div>
-          {series && series.points.length > 0 ? (
-            <TrendChart points={series.points} unit={unit} />
-          ) : (
-            <p className="muted">No time series available.</p>
-          )}
-          <p className="muted small">Click a bar or a table row to see its trend.</p>
-        </section>
+        <main className="page">
+          <Routes>
+            <Route path="/" element={<HomePage />} />
+            <Route path="/map" element={<MapPage />} />
+            <Route path="/recommend" element={<RecommendPage />} />
+            <Route path="/analytics" element={<AnalyticsPage />} />
+            <Route path="/forecast" element={<ForecastPage />} />
+            <Route path="/monitoring" element={<MonitoringPage />} />
+            <Route path="*" element={<p className="muted">Page not found.</p>} />
+          </Routes>
+        </main>
 
-        <section className="card table-card">
-          <table>
-            <thead>
-              <tr>
-                <th scope="col">#</th>
-                <th scope="col">Territory</th>
-                {effectiveLevel === "district" && <th scope="col">Type</th>}
-                <th scope="col" className="num">
-                  Value
-                </th>
-                {ranking?.total != null && (
-                  <th scope="col" className="num">
-                    Share
-                  </th>
-                )}
-              </tr>
-            </thead>
-            <tbody>
-              {ranking?.items.map((r) => (
-                <tr
-                  key={r.soato}
-                  className={selected.soato === r.soato ? "selected" : ""}
-                  onClick={() => setSelected({ level: effectiveLevel, soato: r.soato })}
-                  tabIndex={0}
-                  onKeyDown={(e) => e.key === "Enter" && setSelected({ level: effectiveLevel, soato: r.soato })}
-                >
-                  <td>{r.rank}</td>
-                  <td>{r.name}</td>
-                  {effectiveLevel === "district" && <td className="muted">{r.kind}</td>}
-                  <td className="num">{formatValue(r.value, unit)}</td>
-                  {ranking.total != null && (
-                    <td className="num">{r.share != null ? `${(r.share * 100).toFixed(1)}%` : "—"}</td>
-                  )}
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </section>
-      </main>
+        <footer className="footer">
+          <span>
+            Source: <a href="https://siat.stat.uz" target="_blank" rel="noreferrer">SIAT — State Statistics Committee</a>.
+            Official statistics, model predictions and AI interpretation are always shown separately.
+          </span>
+          <span>Scores and forecasts are decision support, not a guarantee.</span>
+        </footer>
 
-      <footer className="footer">
-        <span>
-          Source:{" "}
-          {source?.url ? (
-            <a href={source.url} target="_blank" rel="noreferrer">
-              SIAT dataset {source.siat_dataset_id}
-            </a>
-          ) : (
-            "SIAT (siat.stat.uz)"
-          )}
-          {current?.source_name ? ` — ${current.source_name}` : ""}
-        </span>
-        {ranking?.meta.retrieved_at && (
-          <span>Retrieved {new Date(ranking.meta.retrieved_at).toLocaleDateString("en-GB")}</span>
+        {!chatOpen && (
+          <button type="button" className="fab" onClick={() => ask()} aria-label="Open AI analyst">
+            ✦ Ask AI
+          </button>
         )}
-        <span>Official statistics only — no synthetic data shown.</span>
-      </footer>
-
-      {!chatOpen && (
-        <button type="button" className="fab" onClick={() => setChatOpen(true)} aria-label="Open AI analyst">
-          ✦ Ask AI
-        </button>
-      )}
-      <ChatPanel open={chatOpen} onClose={() => setChatOpen(false)} initialQuestion={initialAsk} />
-    </div>
+        <ChatPanel open={chatOpen} onClose={() => setChatOpen(false)} request={request} onShowMap={showOnMap} />
+      </div>
+    </ChatContext.Provider>
   );
 }
 

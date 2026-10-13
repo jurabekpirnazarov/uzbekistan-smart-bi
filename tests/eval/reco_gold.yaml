@@ -1,0 +1,48 @@
+# Recommendation gold set (PLAN.md Phase 11).
+#
+# IMPORTANT: relevance labels (0–3) must come from INDEPENDENT judgement — local knowledge, market
+# observation, expert interviews — NOT from the scoring features, otherwise the evaluation is circular.
+#
+# The 5 queries below are PLACEHOLDER examples written by the developer to make the pipeline runnable.
+# They are not expert labels and the evaluation report says so while `labelled_by: placeholder`.
+# TODO(expert): replace these labels and add ≥ 25 more queries (target: ≥ 30).
+#
+# Grades: 3 = clearly a top location, 2 = good, 1 = possible, 0 = poor (unlisted districts count as 0).
+
+queries:
+  - id: bakery_fergana
+    business_type: bakery
+    region: "1730"
+    labelled_by: placeholder
+    relevance: {"1730401": 3, "1730405": 3, "1730412": 2, "1730218": 1, "1730233": 1}
+
+  - id: pharmacy_samarkand
+    business_type: pharmacy
+    region: "1718"
+    labelled_by: placeholder
+    relevance: {"1718401": 3, "1718236": 2, "1718215": 2, "1718212": 1, "1718233": 1}
+
+  - id: cafe_tashkent_city
+    business_type: cafe
+    region: "1726"
+    labelled_by: placeholder
+    relevance: {"1726269": 3, "1726266": 3, "1726273": 2, "1726277": 2, "1726294": 2}
+
+  - id: supermarket_andijan
+    business_type: supermarket
+    region: "1703"
+    labelled_by: placeholder
+    relevance: {"1703401": 3, "1703224": 2, "1703203": 1, "1703230": 1}
+
+  - id: logistics_tashkent_region
+    business_type: logistics
+    region: "1727"
+    labelled_by: placeholder
+    relevance: {"1727237": 3, "1727248": 2, "1727265": 2, "1727259": 2, "1727401": 1}
+
+  # TODO(expert): add queries 6–30, e.g.
+  # - id: restaurant_bukhara
+  #   business_type: restaurant
+  #   region: "1706"
+  #   labelled_by: expert:<name or role>
+  #   relevance: {"<soato>": 3, ...}

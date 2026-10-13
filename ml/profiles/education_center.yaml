@@ -1,0 +1,14 @@
+business_type: education_center
+display_name: {en: Education center, uz: O‘quv markazi, ru: Учебный центр}
+keywords: [education, school, training, courses, o‘quv, "o'quv", ta'lim, kurs, учебн, образован, курс]
+min_budget_uzs: 150_000_000
+default_level: district
+# The 0–14 age share would fit here, but there is no official district age structure in the warehouse yet.
+factors:
+  - {feature: population,                    weight: 0.20, direction: "+", label: Large population}
+  - {feature: education_services_per_capita, weight: 0.20, direction: "+", label: Education spending per person}
+  - {feature: education_services_growth,     weight: 0.20, direction: "+", label: Education-service growth}
+  - {feature: population_growth,             weight: 0.15, direction: "+", label: Growing population}
+  - {feature: urbanization,                  weight: 0.15, direction: "+", label: Urban demand}
+  - {feature: business_density,              weight: 0.10, direction: "-", label: Low competition}
+normalization: percentile

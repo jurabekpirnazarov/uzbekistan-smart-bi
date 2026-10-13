@@ -1,126 +1,101 @@
 # Uzbekistan Smart Business Intelligence
 
-An agentic AI platform that turns official SIAT / Stat.uz statistics into data-backed
-business location recommendations for Uzbekistan.
+An agentic AI platform that turns official **SIAT / Stat.uz** statistics into data-backed business location
+recommendations for Uzbekistan:
 
+**SIAT download → warehouse → features → forecasts → Business Opportunity Score → MCP tools → AI agent + RAG →
+dashboard + 3D map + chat → monitoring + evaluation.**
+
+![Home](docs/screenshots/home.png)
+
+## What it does
+
+- **3D map** of 14 regions and 208 districts/cities, coloured and extruded by any official indicator.
+- **Location recommendations** for 11 business types with a transparent **Business Opportunity Score**: every
+  score shows its factor breakdown, official values, years, SIAT sources and a rank range.
+- **Forecasts** (1–3 years) from backtested models with 80 % / 95 % intervals, always labelled as predictions.
+- **AI analyst** (English, O‘zbekcha, Русский). It calls tools for every number, and a verifier checks each
+  number in the answer against the tool results. It works without an OpenAI key in rule-based mode.
+- **MCP server** with 16 statistical tools for Claude Desktop or any MCP client.
+- **Monitoring and evaluation:** data quality, drift, forecast error, recommendation stability, AI cost and
+  faithfulness, plus Prometheus/Grafana, MLflow and an auto-generated evaluation report.
+
+| Recommend | Map focus from the chat | Forecast |
+|---|---|---|
+| ![](docs/screenshots/recommend.png) | ![](docs/screenshots/chat.png) | ![](docs/screenshots/forecast.png) |
+
+## Rules the system enforces
+
+1. The LLM never computes numbers. Growth, shares, per-capita values, scores and forecasts are computed in
+   Python, and answers are verified number by number.
+2. No invented statistics. Missing data → *"I don't have sufficient official data to answer this reliably."*
+3. Every value is traceable to a SIAT dataset, period, unit and retrieval time.
+4. Official statistic / model prediction / AI interpretation are always shown as separate layers.
+5. The Business Opportunity Score is decision support, not a guarantee, and its breakdown is always shown.
+
+## Quick start (Windows, no Docker)
+
+```powershell
+git clone https://github.com/jurabekpirnazarov/uzbekistan-smart-bi.git
+cd uzbekistan-smart-bi
+copy .env.example .env                      # optional: OPENAI_API_KEY=...
+python -m venv .venv ; .\.venv\Scripts\Activate.ps1
+pip install -e ".\backend[dev,mlflow]" typer "mcp>=1.9,<2"
+# put portable PostgreSQL 16 + PostGIS into .tools\pgsql (see docs/runbook.md), then:
+python manage.py db-init
+python manage.py demo        # ingest → geography + RAG → features → train → monitor → eval
+python manage.py dev         # http://localhost:5174
 ```
-SIAT download → warehouse → features → forecasts → Business Opportunity Score
-→ MCP tools → AI agent + RAG → dashboard + 3D map + chat → monitoring + evaluation
-```
 
-Project rules: [`CLAUDE.md`](CLAUDE.md) · Build plan (phases 0–13): [`PLAN.md`](PLAN.md)
+With Docker: `docker compose up -d --build` then `docker compose run --rm worker python manage.py demo`
+→ http://localhost:8080. Full instructions are in [docs/runbook.md](docs/runbook.md).
 
-## Status
-
-| Phase | State |
+| URL | What |
 |---|---|
-| SIAT ingest (`pipelines/siat_ingest.py`) | ✅ working |
-| 0 — Repository, Docker, task runner | ✅ done |
-| 1 — Warehouse (lean): 26 indicators, 14 regions, 208 districts/cities, 43.5k observations | ✅ done |
-| 6 — API (lean): overview, indicators, regions, statistics, timeseries | ✅ done |
-| 9 — Dashboard (lean): KPIs, ranking chart + table, trends | ✅ done |
-| 2–5, 7–8, 10–13 | ⏳ planned |
-
-## Quick start — local, no Docker (Windows PowerShell)
-
-Requirements: Python 3.11+, Node 20+, portable PostgreSQL in `.tools/` (see below).
-
-```powershell
-python -m venv .venv
-.\.venv\Scripts\Activate.ps1
-pip install -e "backend[dev]" "mcp>=1.9,<2" typer
-copy .env.example .env
-
-python manage.py db-init               # first time only
-python manage.py ingest --local        # download SIAT data + migrate + load (≈1 min)
-python manage.py dev                   # database + API + UI → http://localhost:5174
-```
-
-## Quick start — Docker
-
-Requirements: Docker Desktop.
-
-```powershell
-# 1. Python environment
-python -m venv .venv
-.\.venv\Scripts\Activate.ps1
-pip install -e "backend[dev]" "mcp>=1.9,<2" typer
-
-# 2. Configuration
-copy .env.example .env          # add OPENAI_API_KEY if you have one (optional)
-
-# 3. Start the stack
-python manage.py up             # docker compose up -d --build
-python manage.py ps             # every service should be "healthy"
-```
-
-| Service | URL |
-|---|---|
-| Frontend | http://localhost:5173 |
-| API + docs | http://localhost:8000/docs · http://localhost:8000/health |
-| MCP server | http://localhost:8100/mcp |
-| Grafana | http://localhost:3000 (admin / admin) |
-| Prometheus | http://localhost:9090 |
-| MLflow | http://localhost:5000 |
-
-## Official data (SIAT)
-
-```powershell
-python pipelines/siat_ingest.py selftest                   # offline parser test
-python pipelines/siat_ingest.py search "average monthly wage"
-python pipelines/siat_ingest.py fetch --ids 246 2044 4482  # writes to ./data
-python pipelines/siat_ingest.py report                     # region/district coverage
-```
-
-Outputs: `data/raw/siat/` (raw JSON + sha256), `data/processed/*.csv`, `data/siat.db` (SQLite).
+| http://localhost:5174 | App (local dev) · http://localhost:8080 with Docker |
+| http://localhost:8000/docs | REST API (OpenAPI) |
+| http://localhost:8100/mcp | MCP server (streamable HTTP) |
+| http://localhost:5000 | MLflow (forecast training and evaluation runs) |
+| http://localhost:3000 · :9090 | Grafana · Prometheus (Docker stack) |
 
 ## Commands
 
 ```powershell
-python manage.py up | down | ps | logs [service]
-python manage.py dev            # local: db + API (:8000) + UI (:5174)
-python manage.py ingest --local # SIAT → Postgres (--no-download to reuse cached raw files)
-python manage.py migrate        # alembic upgrade head
-python manage.py test           # pytest (integration tests skip if the DB is not loaded)
-python manage.py lint [--fix]   # ruff
-python manage.py selftest       # SIAT parser test
-python manage.py seed | features | train | eval | monitor | demo          # added phase by phase
+python manage.py dev | demo | ingest | seed | features | train | monitor | eval
+python manage.py test | lint | backup | restore | db-start | db-stop
+cd frontend ; npm run e2e      # Playwright end-to-end tests (needs `python manage.py dev` running)
 ```
 
-## Local development without Docker
+`DATA_MODE=official` (default) uses official statistics only. Anything synthetic would carry a
+**"DEMO / SYNTHETIC DATA"** label in the UI and in agent answers. None is loaded.
 
-PostgreSQL 16 + PostGIS run from a portable copy in `.tools/pgsql` (no admin rights needed; not in git).
-To set it up on a new machine, unzip the EDB binaries
-(`postgresql-16.x-windows-x64-binaries.zip`) into `.tools/` and copy the PostGIS bundle
-(`postgis-bundle-pg16-3.x.zip` from download.osgeo.org) `bin/ lib/ share/` over `.tools/pgsql/`.
+## Documentation
 
-```powershell
-python manage.py db-init      # first time: cluster + sbi/mlflow databases + postgis (idempotent)
-python manage.py db-start     # after every reboot
-python manage.py db-status | db-stop | db-psql
-```
-
-pgvector is not available in this mode, so RAG falls back to BM25 (CLAUDE.md rule 10).
-
-```powershell
-uvicorn app.main:app --app-dir backend --reload --port 8000   # API
-python -m mcp_server.server                                   # MCP (streamable-http :8100)
-cd frontend; npm install; npm run dev                         # UI on :5173, proxies /api to :8000
-```
-
-Without a running Postgres, `/health` returns `503 {"status":"degraded","db":"down"}`. That is expected.
+| | |
+|---|---|
+| [Architecture](docs/architecture.md) | components, data flow, agent sequence, deployment (Mermaid) |
+| [Data dictionary](docs/data_dictionary.md) | indicators, units, tables, traceability |
+| [Features](docs/features.md) | every feature: formula and business meaning |
+| [Scoring](docs/scoring.md) | Business Opportunity Score method and limitations |
+| [API](docs/api.md) · [MCP](docs/mcp.md) | endpoints, SSE events, MCP tools and how to connect |
+| [Monitoring](docs/monitoring.md) | metrics, drift, dashboards, alerts |
+| [Evaluation report](docs/evaluation_report.md) | generated by `python manage.py eval` |
+| [Limitations](docs/limitations.md) | read before using the numbers |
+| [Research questions](docs/research_questions.md) · [Demo script](docs/demo_script.md) · [Weekly report](docs/weekly_report_template.md) | internship material |
 
 ## Repository layout
 
 ```
-backend/      FastAPI app (app/api, app/services, app/db, app/core) + Alembic
-mcp_server/   FastMCP server (stdio + streamable-http)
-agents/ rag/ ml/          agent, retrieval, features/scoring/forecasting/evaluation
-pipelines/    siat_ingest.py (+ loaders in later phases)
-data/         raw/, processed/, reference/, docs/
-monitoring/   prometheus/, grafana/, mlflow/
-frontend/     React + Vite + TypeScript
-tests/        unit/, integration/, eval/
-db/           Postgres 16 + PostGIS + pgvector image
-manage.py     task runner (Typer)
+backend/     FastAPI app — app/services is the only place business logic lives
+mcp_server/  FastMCP server (16 tools)
+ml/          features/, scoring/ (+ profiles/*.yaml), forecasting/, evaluation/
+rag/         index build + hybrid retrieval (full-text + embeddings, RRF)
+pipelines/   siat_ingest.py (SIAT downloader), load_siat.py, load_reference.py (geography)
+monitoring/  drift.py, Prometheus config + alerts, Grafana dashboards
+frontend/    React + Vite + TypeScript, MapLibre 3D map, Recharts, Playwright e2e
+tests/       unit/, integration/, eval/ (gold sets)
+docs/        documentation and screenshots
 ```
+
+Data: SIAT, State Statistics Committee of the Republic of Uzbekistan. Boundaries: geoBoundaries / OCHA
+(CC BY 3.0 IGO) and dirixtt/GeoJSON-Uzbekistan (MIT). See [data/reference/LICENSES.md](data/reference/LICENSES.md).

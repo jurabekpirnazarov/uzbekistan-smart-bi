@@ -1,16 +1,23 @@
-# Build context: repository root (so pipelines/ and ml/ can be copied in later phases).
+# Build context: repository root. One image for the API and the batch worker.
 FROM python:3.11-slim
 
-ENV PYTHONDONTWRITEBYTECODE=1 PYTHONUNBUFFERED=1 PIP_NO_CACHE_DIR=1
+ENV PYTHONDONTWRITEBYTECODE=1 PYTHONUNBUFFERED=1 PIP_NO_CACHE_DIR=1 \
+    PYTHONPATH=/app:/app/backend MLFLOW_DISABLE_AGENT_HINT=1
 WORKDIR /app
 
 COPY backend/pyproject.toml backend/pyproject.toml
 COPY backend/app backend/app
-RUN pip install ./backend
+RUN pip install ./backend typer "mcp>=1.9,<2" "mlflow-skinny>=2.14"
 
 COPY backend/alembic.ini backend/alembic.ini
 COPY backend/alembic backend/alembic
 COPY pipelines pipelines
+COPY ml ml
+COPY rag rag
+COPY monitoring/__init__.py monitoring/drift.py monitoring/
+COPY data/reference data/reference
+COPY docs docs
+COPY tests/eval tests/eval
 COPY manage.py manage.py
 
 EXPOSE 8000

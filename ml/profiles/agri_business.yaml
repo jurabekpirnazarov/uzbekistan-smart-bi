@@ -1,0 +1,14 @@
+business_type: agri_business
+display_name: {en: Agri-business, uz: Agrobiznes, ru: Агробизнес}
+keywords: [agri, agriculture, farm, greenhouse, qishloq xo‘jalik, fermer, issiqxona, агро, ферм, теплиц, сельск]
+min_budget_uzs: 500_000_000
+default_level: district
+factors:
+  - {feature: urbanization,                  weight: 0.25, direction: "-", label: Rural area}
+  - {feature: population,                    weight: 0.15, direction: "+", label: Labour pool}
+  - {feature: population_growth,             weight: 0.10, direction: "+", label: Growing population}
+  - {feature: business_density,              weight: 0.15, direction: "-", label: Low competition}
+  - {feature: transport_services_per_capita, weight: 0.15, direction: "+", label: Transport access}
+  - {feature: trade_growth,                  weight: 0.10, direction: "+", label: Trade growth}
+  - {feature: region_small_business_share,   weight: 0.10, direction: "+", label: Small-business economy (region)}
+normalization: percentile

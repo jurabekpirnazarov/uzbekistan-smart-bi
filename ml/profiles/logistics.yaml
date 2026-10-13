@@ -1,0 +1,13 @@
+business_type: logistics
+display_name: {en: Logistics, uz: Logistika, ru: Логистика}
+keywords: [logistics, transport, delivery, warehouse, logistika, yuk tashish, ombor, логист, транспорт, склад]
+min_budget_uzs: 1_000_000_000
+default_level: district
+factors:
+  - {feature: transport_services_per_capita, weight: 0.20, direction: "+", label: Transport spending per person}
+  - {feature: transport_services_growth,     weight: 0.20, direction: "+", label: Transport-service growth}
+  - {feature: business_density,              weight: 0.20, direction: "+", label: Many business clients}
+  - {feature: business_growth,               weight: 0.15, direction: "+", label: Business growth}
+  - {feature: population,                    weight: 0.15, direction: "+", label: Large population}
+  - {feature: trade_per_capita,              weight: 0.10, direction: "+", label: Trade activity}
+normalization: percentile

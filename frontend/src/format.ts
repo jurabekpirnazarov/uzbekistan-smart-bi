@@ -39,3 +39,33 @@ export function formatPct(v: number | null): string {
   if (v === null) return "—";
   return `${v >= 0 ? "+" : ""}${nf(1).format(v)}%`;
 }
+
+export const CATEGORY_LABELS: Record<string, string> = {
+  population: "Population",
+  business: "Business activity",
+  services: "Market services",
+  health: "Health facilities",
+  economy: "Economy",
+};
+
+/** Raw value of a scoring feature, in the unit the feature is defined in (ml/features/definitions.yaml). */
+export function formatFeature(feature: string, raw: number | null): string {
+  if (raw === null || raw === undefined) return "—";
+  if (feature === "is_city") return raw >= 0.5 ? "City" : "District";
+  if (feature === "population") return `${nf(0).format(raw)} people`;
+  if (feature === "region_small_business_share") return `${nf(1).format(raw)}% of GVA`;
+  if (feature.endsWith("_per_capita")) return `${nf(0).format(raw)} UZS / person`;
+  if (feature.endsWith("_per_10k")) return `${nf(2).format(raw)} per 10k people`;
+  if (feature === "business_density") return `${nf(1).format(raw)} per 1,000 people`;
+  if (feature === "urbanization" || feature.includes("growth") || feature.includes("rate") || feature.includes("cagr")) {
+    const pct = raw * 100;
+    return `${feature === "urbanization" ? "" : pct >= 0 ? "+" : ""}${nf(1).format(pct)}%`;
+  }
+  return nf(2).format(raw);
+}
+
+export const LEVEL_LABEL: Record<string, string> = { country: "Country", region: "Region", district: "District / city" };
+
+export function formatUzs(v: number): string {
+  return formatValue(v, "UZS");
+}

@@ -27,7 +27,7 @@ class Settings(BaseSettings):
     mlflow_tracking_uri: str = "http://localhost:5000"
     otel_enabled: bool = False
 
-    cors_origins: list[str] = ["http://localhost:5173"]
+    cors_origins: list[str] = ["http://localhost:5173", "http://localhost:5174", "http://localhost:8080"]
 
     @property
     def llm_enabled(self) -> bool:

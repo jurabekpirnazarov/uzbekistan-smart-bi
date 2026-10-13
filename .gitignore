@@ -7,6 +7,8 @@ venv/
 data/raw/
 data/siat.db
 data/processed/
+# boundary files, downloaded by pipelines/load_reference.py
+data/reference/geo/
 
 # Python
 __pycache__/
@@ -21,6 +23,8 @@ dist/
 # Node
 node_modules/
 frontend/dist/
+frontend/test-results/
+frontend/playwright-report/
 
 # Misc
 mlruns/

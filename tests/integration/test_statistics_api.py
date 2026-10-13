@@ -13,7 +13,7 @@ from app.db.session import get_engine
 from app.main import create_app
 
 
-def _db_loaded() -> bool:
+def _db_loaded() -> bool:  # kept local: this module only needs observations
     try:
         with get_engine().connect() as c:
             return (c.execute(text("SELECT count(*) FROM observations")).scalar() or 0) > 0

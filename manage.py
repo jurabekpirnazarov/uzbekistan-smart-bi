@@ -1,12 +1,13 @@
 #!/usr/bin/env python3
 """Cross-platform task runner (works on Windows PowerShell without make).
 
-    python manage.py up | down | logs | ps
+    python manage.py up | down | logs | ps                       (Docker)
+    python manage.py dev                                         (no Docker: everything on this machine)
     python manage.py ingest | seed | features | train | eval | monitor | demo
-    python manage.py test | lint | selftest
+    python manage.py backup | restore | test | lint | selftest
 
-Jobs that need the database run inside the worker container
-(`docker compose run --rm worker ...`). Pass --local to run them on the host instead.
+Jobs that need the database run inside the worker container (`docker compose run --rm worker ...`)
+when Docker is available, otherwise on the host. --local forces the host.
 Only `typer` is required on the host to use this file.
 """
 
@@ -48,16 +49,26 @@ def compose(*args: str) -> list[str]:
     return ["docker", "compose", *args]
 
 
+def docker_available() -> bool:
+    return shutil.which("docker") is not None
+
+
 def job(args: list[str], local: bool) -> None:
-    """Run a Python job either in the worker container or on the host."""
-    if local:
-        run([PY, *args])
+    """Run a Python job in the worker container, or on the host (--local, or when Docker is missing)."""
+    if local or not docker_available():
+        env = {**os.environ, "PYTHONPATH": os.pathsep.join([str(ROOT), str(ROOT / "backend")])}
+        env.setdefault("MLFLOW_DISABLE_AGENT_HINT", "1")
+        env.setdefault("PYTHONIOENCODING", "utf-8")  # job output has non-ASCII; never crash on cp1251 consoles
+        typer.secho("$ " + " ".join([PY, *args]), fg=typer.colors.BRIGHT_BLACK)
+        code = subprocess.call([PY, *args], cwd=ROOT, env=env)
+        if code != 0:
+            raise typer.Exit(code)
     else:
         run(compose("run", "--rm", "worker", "python", *args))
 
 
 def not_yet(phase: int) -> None:
-    typer.secho(f"Not implemented yet — arrives in Phase {phase} (see PLAN.md).", fg=typer.colors.YELLOW)
+    typer.secho(f"Not implemented yet - arrives in Phase {phase} (see PLAN.md).", fg=typer.colors.YELLOW)
     raise typer.Exit(1)
 
 
@@ -155,7 +166,7 @@ def db_init() -> None:
     psql("CREATE EXTENSION IF NOT EXISTS postgis", db=PG_DB)
     if psql("CREATE EXTENSION IF NOT EXISTS vector", db=PG_DB, check=False) != 0:
         typer.secho(
-            "pgvector is not available locally — RAG will use BM25 only (allowed by CLAUDE.md rule 10).",
+            "pgvector is not available locally - RAG will use BM25 only (allowed by CLAUDE.md rule 10).",
             fg=typer.colors.YELLOW,
         )
     psql("SELECT 'postgis ' || postgis_version()", db=PG_DB)
@@ -176,7 +187,7 @@ def db_start() -> None:
         stderr=subprocess.DEVNULL,
     )
     if code != 0:
-        typer.secho(f"PostgreSQL failed to start — see {PG_LOG}", fg=typer.colors.RED)
+        typer.secho(f"PostgreSQL failed to start - see {PG_LOG}", fg=typer.colors.RED)
         raise typer.Exit(code)
     typer.secho(f"PostgreSQL running on localhost:{PG_PORT} (log: {PG_LOG.relative_to(ROOT)})", fg=typer.colors.GREEN)
 
@@ -264,7 +275,7 @@ def dev(port: int = typer.Option(5174, help="frontend dev-server port")) -> None
     migrate(True)
     npm = shutil.which("npm")
     if npm is None:
-        typer.secho("npm not found — install Node.js 20+ to run the frontend.", fg=typer.colors.RED)
+        typer.secho("npm not found - install Node.js 20+ to run the frontend.", fg=typer.colors.RED)
         raise typer.Exit(1)
     if not (ROOT / "frontend" / "node_modules").exists():
         subprocess.check_call([npm, "install", "--no-audit", "--no-fund"], cwd=ROOT / "frontend")
@@ -287,13 +298,32 @@ def dev(port: int = typer.Option(5174, help="frontend dev-server port")) -> None
         ),
         subprocess.Popen([npm, "run", "dev", "--", "--port", str(port), "--strictPort"], cwd=ROOT / "frontend"),
     ]
+    env = {**os.environ, "PYTHONPATH": os.pathsep.join([str(ROOT), str(ROOT / "backend")])}
+    extras = []
+    try:  # optional services: they must never stop the app from starting
+        procs.append(subprocess.Popen([PY, "-m", "mcp_server.server"], cwd=ROOT, env=env))
+        extras.append("  MCP:    http://localhost:8100/mcp")
+    except OSError:
+        pass
+    mlflow_exe = Path(PY).with_name("mlflow.exe" if sys.platform == "win32" else "mlflow")
+    if mlflow_exe.exists():
+        store = "sqlite:///" + (ROOT / ".tools" / "mlflow.db").as_posix()
+        procs.append(
+            subprocess.Popen(
+                [str(mlflow_exe), "ui", "--backend-store-uri", store, "--port", "5000", "--host", "127.0.0.1"],
+                cwd=ROOT,
+                env={**env, "MLFLOW_DISABLE_AGENT_HINT": "1"},
+            )
+        )
+        extras.append("  MLflow: http://localhost:5000")
     typer.secho(
-        f"\n  App:  http://localhost:{port}\n  API:  http://localhost:8000/docs\n  Ctrl+C to stop "
-        "(the database keeps running; `python manage.py db-stop` stops it).\n",
+        f"\n  App:    http://localhost:{port}\n  API:    http://localhost:8000/docs\n"
+        + "\n".join(extras)
+        + "\n  Ctrl+C to stop (the database keeps running; `python manage.py db-stop` stops it).\n",
         fg=typer.colors.GREEN,
     )
     try:
-        while all(p.poll() is None for p in procs):
+        while all(p.poll() is None for p in procs[:2]):
             time.sleep(1)
     except KeyboardInterrupt:
         pass
@@ -309,39 +339,90 @@ def dev(port: int = typer.Option(5174, help="frontend dev-server port")) -> None
 
 
 @app.command()
-def seed(local: bool = typer.Option(False)) -> None:
-    """Reference data, geo boundaries, synthetic gap-fill, RAG index (Phases 1, 2, 8)."""
-    not_yet(2)
+def seed(local: bool = typer.Option(False, help="run on the host instead of the worker container")) -> None:
+    """Reference geography (Phase 2) + RAG index (Phase 8)."""
+    job(["pipelines/load_reference.py"], local)
+    job(["-m", "rag.ingest"], local)
 
 
 @app.command()
-def features(local: bool = typer.Option(False)) -> None:
-    """Compute features (Phase 3)."""
-    not_yet(3)
+def features(local: bool = typer.Option(False, help="run on the host instead of the worker container")) -> None:
+    """Compute features from official observations (Phase 3)."""
+    job(["-m", "ml.features.pipeline"], local)
 
 
 @app.command()
-def train(local: bool = typer.Option(False)) -> None:
-    """Train forecasting models → MLflow (Phase 5)."""
-    not_yet(5)
+def train(local: bool = typer.Option(False, help="run on the host instead of the worker container")) -> None:
+    """Backtest + train forecasting models, write forecasts, log to MLflow (Phase 5)."""
+    job(["-m", "ml.forecasting.train"], local)
 
 
 @app.command("eval")
-def evaluate(local: bool = typer.Option(False)) -> None:
-    """Recommendation, forecast, agent and RAG evaluation (Phase 11)."""
-    not_yet(11)
+def evaluate(local: bool = typer.Option(False, help="run on the host instead of the worker container")) -> None:
+    """Recommendation, forecast, agent and RAG evaluation -> docs/evaluation_report.md (Phase 11)."""
+    job(["-m", "ml.evaluation.run_all"], local)
 
 
 @app.command()
-def monitor(local: bool = typer.Option(False)) -> None:
-    """Drift and data-quality metrics (Phase 10)."""
-    not_yet(10)
+def monitor(local: bool = typer.Option(False, help="run on the host instead of the worker container")) -> None:
+    """Data quality, feature drift, realised error, recommendation stability (Phase 10)."""
+    job(["-m", "monitoring.drift"], local)
 
 
 @app.command()
-def demo() -> None:
-    """up + ingest + seed + features + train in one go (Phase 12)."""
-    not_yet(12)
+def demo(
+    download: bool = typer.Option(False, help="refresh datasets from SIAT (default: use cached raw files)"),
+    docker: bool = typer.Option(False, help="start the Docker stack first"),
+) -> None:
+    """One command: database -> ingest -> seed -> features -> train -> monitor -> eval, then print URLs."""
+    local = not (docker and docker_available())
+    if not local:
+        up(build=True)
+    elif PG_BIN.exists():  # portable PostgreSQL on this machine
+        if not (PG_DATA / "PG_VERSION").exists():
+            db_init()
+        db_start()
+    # otherwise (e.g. inside the Docker worker) DATABASE_URL points at a running database
+    raw = ROOT / "data" / "raw" / "siat"
+    ingest(local=local, download=download or not any(raw.glob("*.json")))
+    seed(local=local)
+    features(local=local)
+    train(local=local)
+    monitor(local=local)
+    evaluate(local=local)
+    typer.secho(
+        "\n  Demo data ready.\n"
+        + ("  Start the app:  python manage.py dev\n" if local else "")
+        + "  App:     http://localhost:"
+        + ("5174" if local else "8080")
+        + "\n  API:     http://localhost:8000/docs\n  MLflow:  http://localhost:5000\n  MCP:     http://localhost:8100/mcp\n",
+        fg=typer.colors.GREEN,
+    )
+
+
+@app.command()
+def backup() -> None:
+    """pg_dump of the sbi database into ./backups (custom format)."""
+    out = ROOT / "backups"
+    out.mkdir(exist_ok=True)
+    target = out / f"sbi-{time.strftime('%Y%m%d-%H%M%S')}.dump"
+    run([pg("pg_dump"), "-h", "localhost", "-p", PG_PORT, "-U", PG_USER, "-d", PG_DB, "-Fc", "-f", str(target)])
+    typer.secho(f"Backup written: {target.relative_to(ROOT)}", fg=typer.colors.GREEN)
+
+
+@app.command()
+def restore(file: Path = typer.Argument(None, help="dump to restore (default: newest in ./backups)")) -> None:
+    """Restore a pg_dump made by `backup` (replaces existing objects)."""
+    dumps = sorted((ROOT / "backups").glob("*.dump"))
+    target = file or (dumps[-1] if dumps else None)
+    if target is None or not Path(target).exists():
+        typer.secho("No backup found in ./backups", fg=typer.colors.RED)
+        raise typer.Exit(1)
+    run(
+        [pg("pg_restore"), "-h", "localhost", "-p", PG_PORT, "-U", PG_USER, "-d", PG_DB, "--clean", "--if-exists"]
+        + ["--no-owner", str(target)]
+    )
+    typer.secho(f"Restored {target}", fg=typer.colors.GREEN)
 
 
 @app.command()

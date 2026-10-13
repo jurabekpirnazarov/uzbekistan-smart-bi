@@ -1,0 +1,50 @@
+# Agent evaluation cases (PLAN.md Phase 11): question → expected tool(s) and answer properties.
+# These describe required behaviour (not subjective labels). 10 cases filled; TODO: extend to 25.
+#
+# expect_tools: at least one of these tools must be called
+# expect_lang:  language of the answer (en | uz | ru)
+# expect_insufficient: true → the answer must contain the insufficient-data sentence
+
+cases:
+  - id: reco_bakery_en
+    question: "I have 700 million UZS. Where in Fergana region should I open a bakery?"
+    expect_tools: [calculate_business_score]
+    expect_lang: en
+  - id: reco_pharmacy_uz
+    question: "Farg‘ona viloyatida dorixona ochish uchun eng yaxshi tuman qaysi?"
+    expect_tools: [calculate_business_score]
+    expect_lang: uz
+  - id: reco_cafe_ru
+    question: "Где в Самаркандской области лучше открыть кафе?"
+    expect_tools: [calculate_business_score]
+    expect_lang: ru
+  - id: forecast_population_ru
+    question: "Прогноз населения Самаркандской области"
+    expect_tools: [forecast_indicator]
+    expect_lang: ru
+  - id: growth_regions_en
+    question: "Which regions grew fastest in operating businesses?"
+    expect_tools: [get_growth_ranking]
+    expect_lang: en
+  - id: compare_en
+    question: "Compare Andijan and Namangan regions"
+    expect_tools: [compare_territories]
+    expect_lang: en
+  - id: income_insufficient_en
+    question: "What is the average wage in Chilanzar district?"
+    expect_tools: []
+    expect_lang: en
+    expect_insufficient: true
+  - id: methodology_en
+    question: "How is the permanent population defined?"
+    expect_tools: [retrieve_documents]
+    expect_lang: en
+  - id: population_district_uz
+    question: "Qo‘qon shahri aholisi qancha?"
+    expect_tools: [get_timeseries, get_ranking, compare_territories]
+    expect_lang: uz
+  - id: ranking_en
+    question: "Which regions have the largest population?"
+    expect_tools: [get_ranking]
+    expect_lang: en
+  # TODO: add 15 more (mix of en / uz / ru, multi-step questions, edge cases)

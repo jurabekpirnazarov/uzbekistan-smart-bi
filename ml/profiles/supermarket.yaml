@@ -1,0 +1,13 @@
+business_type: supermarket
+display_name: {en: Supermarket, uz: Supermarket, ru: Супермаркет}
+keywords: [supermarket, grocery, minimarket, oziq-ovqat, супермаркет, продукт]
+min_budget_uzs: 800_000_000
+default_level: district
+factors:
+  - {feature: population,        weight: 0.25, direction: "+", label: Large population}
+  - {feature: population_growth, weight: 0.10, direction: "+", label: Growing population}
+  - {feature: trade_per_capita,  weight: 0.20, direction: "+", label: Trade spending per person}
+  - {feature: trade_growth,      weight: 0.15, direction: "+", label: Trade growth}
+  - {feature: urbanization,      weight: 0.15, direction: "+", label: Urban demand}
+  - {feature: business_density,  weight: 0.15, direction: "-", label: Low competition}
+normalization: percentile

@@ -47,7 +47,7 @@ services:
   worker:
     build: {context: ., dockerfile: backend/Dockerfile}
     environment: *backend-env
-    volumes: [./data:/app/data]
+    volumes: [./data:/app/data, ./docs:/app/docs]
     profiles: [jobs]
     command: ["python", "manage.py", "--help"]
     depends_on:
@@ -55,7 +55,7 @@ services:
 
   frontend:
     build: ./frontend
-    ports: ["5173:80"]
+    ports: ["8080:80"]  # 5173/5174 are left free for local Vite dev servers
     depends_on:
       backend: {condition: service_healthy}
     healthcheck:

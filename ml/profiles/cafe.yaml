@@ -1,0 +1,14 @@
+business_type: cafe
+display_name: {en: Cafe, uz: Kafe, ru: Кафе}
+keywords: [cafe, coffee, kafe, qahvaxona, кафе, кофейн]
+min_budget_uzs: 200_000_000
+default_level: district
+factors:
+  - {feature: population,               weight: 0.20, direction: "+", label: Large population}
+  - {feature: food_services_per_capita, weight: 0.20, direction: "+", label: Food-service spending}
+  - {feature: food_services_growth,     weight: 0.15, direction: "+", label: Food-service growth}
+  - {feature: urbanization,             weight: 0.15, direction: "+", label: Urban demand}
+  - {feature: population_growth,        weight: 0.10, direction: "+", label: Growing population}
+  - {feature: business_density,         weight: 0.10, direction: "-", label: Low competition}
+  - {feature: new_business_rate,        weight: 0.10, direction: "+", label: Business dynamism}
+normalization: percentile

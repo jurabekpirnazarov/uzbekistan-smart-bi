@@ -1,0 +1,27 @@
+# Feature definitions (PLAN.md Phase 3). Pure configuration: a new feature = a new line here.
+# Types: passthrough, growth, cagr, ratio, per_capita, index_to_rate, region_context, reference.
+# Inputs are internal indicator codes from data/reference/indicator_map.yaml.
+
+population:              {type: passthrough, indicator: population_total}
+population_growth:       {type: growth, indicator: population_total, lag: 1}
+population_cagr_5y:      {type: cagr, indicator: population_total, years: 5}
+urbanization:            {type: ratio, num: population_urban, den: population_total}
+business_density:        {type: per_capita, num: enterprises_active, per: 1000}
+new_business_rate:       {type: ratio, num: enterprises_new, den: enterprises_active}
+business_growth:         {type: growth, indicator: enterprises_active, lag: 1}
+services_per_capita:     {type: passthrough, indicator: market_services_per_capita}
+trade_per_capita:        {type: per_capita, num: trade_services_volume, per: 1}
+food_services_per_capita: {type: per_capita, num: food_services_volume, per: 1}
+health_services_per_capita: {type: per_capita, num: health_services_volume, per: 1}
+education_services_per_capita: {type: per_capita, num: education_services_volume, per: 1}
+transport_services_per_capita: {type: per_capita, num: transport_services_volume, per: 1}
+trade_growth:            {type: index_to_rate, indicator: trade_services_growth}      # 112.3 -> 0.123
+food_services_growth:    {type: index_to_rate, indicator: food_services_growth}
+health_services_growth:  {type: index_to_rate, indicator: health_services_growth}
+education_services_growth: {type: index_to_rate, indicator: education_services_growth}
+transport_services_growth: {type: index_to_rate, indicator: transport_services_growth}
+clinics_per_10k:         {type: per_capita, num: outpatient_clinics, per: 10000}
+hospitals_per_10k:       {type: per_capita, num: hospitals, per: 10000}
+region_grp_per_capita:   {type: region_context, num: grp_annual, den: population_total}
+region_small_business_share: {type: region_context, indicator: small_business_share_gva}
+is_city:                 {type: reference, field: districts.kind, equals: city}

@@ -1,0 +1,43 @@
+# Alert rules (PLAN.md Phase 10). Loaded by prometheus.yml (rule_files).
+groups:
+  - name: data
+    rules:
+      - alert: IngestionFailures
+        expr: sum(ingestion_runs_total{status!="ok"}) >= 2
+        for: 5m
+        labels: {severity: warning}
+        annotations: {summary: "Two or more failed SIAT ingestion runs"}
+      - alert: DataStale
+        expr: time() - max(data_last_update_timestamp) > 45 * 86400
+        for: 1h
+        labels: {severity: warning}
+        annotations: {summary: "Official data is older than 45 days"}
+      - alert: DataQualityCheckFailed
+        expr: min(data_quality_check_passed) < 1
+        for: 5m
+        labels: {severity: critical}
+        annotations: {summary: "A data-quality check is failing ({{ $labels.check }})"}
+  - name: models
+    rules:
+      - alert: FeatureDrift
+        expr: feature_drift_psi > 0.2
+        for: 10m
+        labels: {severity: info}
+        annotations: {summary: "PSI {{ $value | printf \"%.2f\" }} for {{ $labels.feature }} ({{ $labels.years }})"}
+      - alert: ForecastAccuracyDegraded
+        expr: model_backtest_smape > 30
+        for: 10m
+        labels: {severity: warning}
+        annotations: {summary: "Backtest sMAPE above 30% for {{ $labels.indicator }} / {{ $labels.level }}"}
+  - name: agent
+    rules:
+      - alert: AgentErrorRate
+        expr: sum(rate(agent_requests_total{status="error"}[5m])) / clamp_min(sum(rate(agent_requests_total[5m])), 1e-9) > 0.10
+        for: 5m
+        labels: {severity: warning}
+        annotations: {summary: "AI analyst error rate above 10%"}
+      - alert: AgentSlow
+        expr: histogram_quantile(0.95, sum by (le) (rate(agent_latency_seconds_bucket[5m]))) > 20
+        for: 5m
+        labels: {severity: warning}
+        annotations: {summary: "AI analyst p95 latency above 20 s"}

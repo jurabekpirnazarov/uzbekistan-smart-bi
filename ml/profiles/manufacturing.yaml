@@ -1,0 +1,15 @@
+business_type: manufacturing
+display_name: {en: Manufacturing, uz: Ishlab chiqarish, ru: Производство}
+keywords: [manufacturing, factory, production, ishlab chiqarish, zavod, fabrika, производств, завод]
+min_budget_uzs: 3_000_000_000
+default_level: district
+factors:
+  - {feature: population,                    weight: 0.15, direction: "+", label: Labour pool}
+  - {feature: population_cagr_5y,            weight: 0.10, direction: "+", label: Long-run population growth}
+  - {feature: business_growth,               weight: 0.15, direction: "+", label: Business growth}
+  - {feature: new_business_rate,             weight: 0.10, direction: "+", label: Business dynamism}
+  - {feature: transport_services_per_capita, weight: 0.15, direction: "+", label: Transport activity}
+  - {feature: region_small_business_share,   weight: 0.15, direction: "+", label: Small-business economy (region)}
+  - {feature: business_density,              weight: 0.10, direction: "-", label: Low competition}
+  - {feature: is_city,                       weight: 0.10, direction: "-", label: Outside city (land cost)}
+normalization: percentile

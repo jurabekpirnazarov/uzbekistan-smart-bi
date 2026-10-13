@@ -1,34 +1,53 @@
 import { useEffect, useRef, useState } from "react";
 import Markdown from "react-markdown";
 import remarkGfm from "remark-gfm";
-import { chatStatus, streamChat, type ChatTurn } from "../api/client";
+import {
+  api,
+  chatStatus,
+  streamChat,
+  type ChatResult,
+  type ChatStatus,
+  type ChatTurn,
+  type MapFocus,
+  type Verification,
+} from "../api/client";
 
 interface Message extends ChatTurn {
   tools?: string[];
   error?: string;
   streaming?: boolean;
+  verification?: Verification;
+  result?: ChatResult;
+  voted?: 1 | -1;
 }
 
 const EXAMPLES = [
   "Where should I open a pharmacy in Fergana region?",
   "Toshkent viloyatida qaysi tumanlarda biznes eng tez o‘smoqda?",
   "Сравни Самарканд и Бухару по населению и услугам.",
-  "Which regions grew fastest in market services since 2020?",
+  "How is the Business Opportunity Score calculated?",
 ];
+
+export interface AskRequest {
+  id: number;
+  text?: string;
+}
 
 export function ChatPanel({
   open,
   onClose,
-  initialQuestion,
+  request,
+  onShowMap,
 }: {
   open: boolean;
   onClose: () => void;
-  initialQuestion?: string;
+  request: AskRequest | null;
+  onShowMap: (f: MapFocus) => void;
 }) {
   const [messages, setMessages] = useState<Message[]>([]);
   const [input, setInput] = useState("");
   const [busy, setBusy] = useState(false);
-  const [status, setStatus] = useState<{ enabled: boolean; model: string | null } | null>(null);
+  const [status, setStatus] = useState<ChatStatus | null>(null);
   const scrollRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLTextAreaElement>(null);
   const abortRef = useRef<AbortController | null>(null);
@@ -36,21 +55,21 @@ export function ChatPanel({
   useEffect(() => {
     chatStatus()
       .then(setStatus)
-      .catch(() => setStatus({ enabled: false, model: null }));
+      .catch(() => setStatus({ enabled: false, mode: "fallback", model: null }));
   }, []);
 
   useEffect(() => {
     if (open) inputRef.current?.focus();
   }, [open]);
 
-  const askedInitial = useRef(false);
+  // a question asked from elsewhere in the app (home page box, ?ask= link)
+  const handled = useRef<number | null>(null);
   useEffect(() => {
-    if (status?.enabled && initialQuestion && !askedInitial.current) {
-      askedInitial.current = true;
-      void send(initialQuestion);
-    }
+    if (!request || !status?.enabled || handled.current === request.id) return;
+    handled.current = request.id;
+    if (request.text) void send(request.text);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [status, initialQuestion]);
+  }, [request, status]);
 
   useEffect(() => {
     scrollRef.current?.scrollTo({ top: scrollRef.current.scrollHeight });
@@ -77,6 +96,8 @@ export function ChatPanel({
         {
           onToken: (t) => updateLast((m) => ({ ...m, content: m.content + t })),
           onToolCall: (tool) => updateLast((m) => ({ ...m, tools: [...(m.tools ?? []), tool.label] })),
+          onVerification: (v) => updateLast((m) => ({ ...m, verification: v })),
+          onResult: (r) => updateLast((m) => ({ ...m, result: r })),
           onError: (message) => updateLast((m) => ({ ...m, error: message })),
           onDone: () => undefined,
         },
@@ -91,14 +112,24 @@ export function ChatPanel({
     }
   };
 
+  const vote = (i: number, rating: 1 | -1) => {
+    const m = messages[i];
+    setMessages((prev) => prev.map((x, j) => (j === i ? { ...x, voted: rating } : x)));
+    void api.feedback({ request_id: m.result?.request_id ?? null, target: "chat", rating }).catch(() => undefined);
+  };
+
+  const subtitle = !status
+    ? "Connecting…"
+    : status.mode === "llm"
+      ? `Official SIAT data · ${status.model}`
+      : "Rule-based mode (no OpenAI key) · official SIAT data";
+
   return (
     <aside className={`chat ${open ? "open" : ""}`} aria-label="AI analyst" aria-hidden={!open}>
       <header className="chat-head">
         <div>
           <h2>AI analyst</h2>
-          <p className="muted small-inline">
-            {status?.enabled ? `Official SIAT data · ${status.model}` : "AI is not configured (OPENAI_API_KEY)"}
-          </p>
+          <p className="muted small-inline">{subtitle}</p>
         </div>
         <div className="chat-actions">
           {messages.length > 0 && (
@@ -116,8 +147,8 @@ export function ChatPanel({
         {messages.length === 0 && (
           <div className="chat-empty">
             <p>
-              Ask about population, businesses and services in any region or district — in English, O‘zbekcha or
-              Русский. Every number comes from official SIAT statistics.
+              Ask about population, businesses, services, forecasts or the best district for a business — in English,
+              O‘zbekcha or Русский. Every number comes from official SIAT statistics or a labelled model.
             </p>
             <div className="chips">
               {EXAMPLES.map((e) => (
@@ -142,6 +173,7 @@ export function ChatPanel({
             )}
             {m.role === "assistant" ? (
               <div className="md">
+                {m.result?.is_synthetic && <div className="banner synthetic">DEMO / SYNTHETIC DATA — not official statistics</div>}
                 {m.content ? (
                   <Markdown remarkPlugins={[remarkGfm]} components={{ a: (p) => <a {...p} target="_blank" rel="noreferrer" /> }}>
                     {m.content}
@@ -154,6 +186,45 @@ export function ChatPanel({
               <p>{m.content}</p>
             )}
             {m.error && <div className="alert">{m.error}</div>}
+            {m.role === "assistant" && !m.streaming && !m.error && m.content && (
+              <div className="msg-foot">
+                {m.verification &&
+                  (m.verification.unsupported.length === 0 ? (
+                    <span className="verify ok" title="Every number was found in a tool result">
+                      ✓ {m.verification.checked} numbers verified
+                    </span>
+                  ) : (
+                    <span className="verify bad" title="These numbers were not found in any tool result — treat with caution">
+                      ⚠ unverified: {m.verification.unsupported.slice(0, 4).join(", ")}
+                    </span>
+                  ))}
+                {m.result?.map_focus && m.result.map_focus.soatos.length > 0 && (
+                  <button type="button" className="link" onClick={() => onShowMap(m.result!.map_focus!)}>
+                    Show on map
+                  </button>
+                )}
+                <span className="feedback">
+                  <button
+                    type="button"
+                    className={`icon-btn small ${m.voted === 1 ? "on" : ""}`}
+                    aria-label="Helpful"
+                    disabled={m.voted !== undefined}
+                    onClick={() => vote(i, 1)}
+                  >
+                    👍
+                  </button>
+                  <button
+                    type="button"
+                    className={`icon-btn small ${m.voted === -1 ? "on" : ""}`}
+                    aria-label="Not helpful"
+                    disabled={m.voted !== undefined}
+                    onClick={() => vote(i, -1)}
+                  >
+                    👎
+                  </button>
+                </span>
+              </div>
+            )}
           </div>
         ))}
       </div>
@@ -169,7 +240,7 @@ export function ChatPanel({
           ref={inputRef}
           value={input}
           rows={2}
-          placeholder={status?.enabled ? "Ask about any region or district…" : "AI is not configured"}
+          placeholder="Ask about any region, district or business…"
           disabled={!status?.enabled}
           onChange={(e) => setInput(e.target.value)}
           onKeyDown={(e) => {

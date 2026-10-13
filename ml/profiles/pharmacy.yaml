@@ -1,0 +1,14 @@
+business_type: pharmacy
+display_name: {en: Pharmacy, uz: Dorixona, ru: Аптека}
+keywords: [pharmacy, drugstore, dorixona, apteka, аптек]
+min_budget_uzs: 250_000_000
+default_level: district
+factors:
+  - {feature: population,                 weight: 0.25, direction: "+", label: Large population}
+  - {feature: health_services_per_capita, weight: 0.15, direction: "+", label: Health spending per person}
+  - {feature: health_services_growth,     weight: 0.15, direction: "+", label: Health-service growth}
+  - {feature: clinics_per_10k,            weight: 0.15, direction: "-", label: Underserved by clinics}
+  - {feature: population_growth,          weight: 0.10, direction: "+", label: Growing population}
+  - {feature: urbanization,               weight: 0.10, direction: "+", label: Urban demand}
+  - {feature: business_density,           weight: 0.10, direction: "-", label: Low competition}
+normalization: percentile

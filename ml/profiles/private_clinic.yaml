@@ -1,0 +1,14 @@
+business_type: private_clinic
+display_name: {en: Private clinic, uz: Xususiy klinika, ru: Частная клиника}
+keywords: [clinic, medical, klinika, shifoxona, клиник, медицин]
+min_budget_uzs: 1_500_000_000
+default_level: district
+factors:
+  - {feature: population,                 weight: 0.20, direction: "+", label: Large population}
+  - {feature: health_services_per_capita, weight: 0.15, direction: "+", label: Health spending per person}
+  - {feature: health_services_growth,     weight: 0.15, direction: "+", label: Health-service growth}
+  - {feature: clinics_per_10k,            weight: 0.20, direction: "-", label: Underserved by clinics}
+  - {feature: hospitals_per_10k,          weight: 0.10, direction: "-", label: Few hospitals}
+  - {feature: population_growth,          weight: 0.10, direction: "+", label: Growing population}
+  - {feature: urbanization,               weight: 0.10, direction: "+", label: Urban demand}
+normalization: percentile
