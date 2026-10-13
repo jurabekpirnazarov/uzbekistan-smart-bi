@@ -124,3 +124,59 @@ export const api = {
   timeseries: (indicator: string, level: Level, soato: string) =>
     request<TimeSeries>(`/timeseries/${indicator}/${level}/${soato}`),
 };
+
+// --- AI analyst chat (SSE over POST) -------------------------------------------------------
+
+export interface ChatTurn {
+  role: "user" | "assistant";
+  content: string;
+}
+
+export interface ChatHandlers {
+  onToken: (text: string) => void;
+  onToolCall: (tool: { name: string; label: string; args: Record<string, unknown> }) => void;
+  onDone: () => void;
+  onError: (message: string) => void;
+}
+
+export async function chatStatus(): Promise<{ enabled: boolean; model: string | null }> {
+  return request("/chat/status");
+}
+
+export async function streamChat(messages: ChatTurn[], h: ChatHandlers, signal?: AbortSignal): Promise<void> {
+  const res = await fetch(`${API_BASE}/chat`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json", Accept: "text/event-stream" },
+    body: JSON.stringify({ messages }),
+    signal,
+  });
+  if (!res.ok || !res.body) {
+    h.onError(`${res.status} ${res.statusText}`);
+    return;
+  }
+  const reader = res.body.getReader();
+  const decoder = new TextDecoder();
+  let buffer = "";
+  for (;;) {
+    const { value, done } = await reader.read();
+    if (done) break;
+    buffer += decoder.decode(value, { stream: true });
+    let sep: number;
+    while ((sep = buffer.indexOf("\n\n")) >= 0) {
+      const block = buffer.slice(0, sep);
+      buffer = buffer.slice(sep + 2);
+      let event = "message";
+      let data = "";
+      for (const line of block.split("\n")) {
+        if (line.startsWith("event: ")) event = line.slice(7);
+        else if (line.startsWith("data: ")) data += line.slice(6);
+      }
+      if (!data) continue;
+      const payload = JSON.parse(data);
+      if (event === "token") h.onToken(payload.text);
+      else if (event === "tool_call") h.onToolCall(payload);
+      else if (event === "error") h.onError(payload.message);
+      else if (event === "done") h.onDone();
+    }
+  }
+}

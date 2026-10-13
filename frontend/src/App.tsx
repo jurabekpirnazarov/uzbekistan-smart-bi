@@ -9,6 +9,7 @@ import {
   type Region,
   type TimeSeries,
 } from "./api/client";
+import { ChatPanel } from "./components/ChatPanel";
 import { RankingChart } from "./components/RankingChart";
 import { TrendChart } from "./components/TrendChart";
 import { formatPct, formatValue, unitLabel } from "./format";
@@ -39,6 +40,9 @@ export function App() {
   const [loadingRanking, setLoadingRanking] = useState(false);
   const [selected, setSelected] = useState<Selected>({ level: "country", soato: "1700" });
   const [series, setSeries] = useState<TimeSeries | null>(null);
+  // ?ask=... opens the AI analyst with that question (shareable question links)
+  const [initialAsk] = useState(() => new URLSearchParams(window.location.search).get("ask") ?? undefined);
+  const [chatOpen, setChatOpen] = useState(Boolean(initialAsk));
 
   // Initial load: health, KPIs, catalogue.
   useEffect(() => {
@@ -100,7 +104,12 @@ export function App() {
           <p className="eyebrow">Official SIAT statistics</p>
           <h1>Uzbekistan Smart Business Intelligence</h1>
         </div>
-        <StatusPill health={health} />
+        <div className="topbar-actions">
+          <StatusPill health={health} />
+          <button type="button" className="ask-btn" onClick={() => setChatOpen(true)}>
+            ✦ Ask AI analyst
+          </button>
+        </div>
       </header>
 
       {overview && (
@@ -306,6 +315,13 @@ export function App() {
         )}
         <span>Official statistics only — no synthetic data shown.</span>
       </footer>
+
+      {!chatOpen && (
+        <button type="button" className="fab" onClick={() => setChatOpen(true)} aria-label="Open AI analyst">
+          ✦ Ask AI
+        </button>
+      )}
+      <ChatPanel open={chatOpen} onClose={() => setChatOpen(false)} initialQuestion={initialAsk} />
     </div>
   );
 }
