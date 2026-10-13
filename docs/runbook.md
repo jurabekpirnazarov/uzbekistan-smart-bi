@@ -46,17 +46,26 @@ Prometheus http://localhost:9090 · MLflow http://localhost:5000 · MCP http://l
 
 ## Automatic data refresh
 
-`python manage.py refresh` downloads new SIAT data and rebuilds what depends on it:
+`python manage.py refresh` (scheduled weekly) downloads new SIAT data and rebuilds what depends on it:
 
-download (only datasets whose SIAT catalog date changed) → migrate → load (idempotent upsert) →
-*if any dataset content changed:* features → forecasts → RAG index → monitoring.
+1. **catalog → discover** — refreshes the SIAT catalogue and finds datasets **published since the last check**.
+   Safe ones (annual; by region and/or district; no extra breakdown dimensions; ≥ 2 years; a unit that can be
+   normalised — people, UZS scales, units, percentages) are mapped automatically into the same schema with code
+   `siat_<id>` in `data/reference/indicator_map.auto.yaml`, flagged `auto_added` (shown as "new (auto-added)" in the
+   UI and excluded from the Business Opportunity Score until reviewed). Others are listed with the reason in
+   `data/processed/discover_last.json` for manual mapping. To promote an auto-added indicator, move its entry to
+   `indicator_map.yaml` under a meaningful code.
+2. **download** — re-downloads mapped datasets whose SIAT catalog date changed (new years / revisions).
+3. **migrate → load** (idempotent upsert; columns owned by other jobs are never overwritten) → **geography**
+   (new districts get a location).
+4. *if any dataset changed or was added:* **features → forecasts → RAG index**; always **monitoring**.
 
 Every run is stored in `pipeline_runs` (shown on the Monitoring page) and logged to `logs/refresh-YYYYMMDD.log`;
 a lock file prevents parallel runs. `--force` recomputes even without new data.
 
 | Where | How it is scheduled |
 |---|---|
-| This Windows machine | `python manage.py schedule` registers the task *Uzbekistan Smart BI - data refresh* in Windows Task Scheduler for the current user (no admin). Default: every 3 days at 03:00 (`REFRESH_EVERY_DAYS`, `REFRESH_AT` in `.env`, or `--every-days 2 --at 04:30`). A run missed while the computer was off starts when it is back on. `--status` shows the next run, `--remove` deletes the task. |
+| This Windows machine | `python manage.py schedule` registers the task *Uzbekistan Smart BI - data refresh* in Windows Task Scheduler for the current user (no admin). Default: every 7 days at 03:00 (`REFRESH_EVERY_DAYS`, `REFRESH_AT` in `.env`, or `--every-days 2 --at 04:30`). A run missed while the computer was off starts when it is back on. `--status` shows the next run, `--remove` deletes the task. |
 | Docker / server | The `scheduler` service runs `python manage.py scheduler`: it computes the next run from the last successful run in `pipeline_runs`, so container restarts do not cause extra downloads. |
 | Linux without Docker | cron: `0 3 */3 * * cd /path/to/repo && .venv/bin/python manage.py refresh --trigger schedule` |
 

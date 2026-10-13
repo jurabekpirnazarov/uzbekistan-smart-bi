@@ -51,6 +51,7 @@ erDiagram
     boolean higher_is_better
     integer siat_dataset_id
     text source_name
+    boolean auto_added
   }
   observations {
     bigint id PK
@@ -195,6 +196,7 @@ erDiagram
     string status
     integer datasets_checked
     json datasets_changed
+    json datasets_added
     json steps
     text error
   }
@@ -207,9 +209,9 @@ erDiagram
   }
   regions ||--o{ districts : "region_id"
   indicators ||--o{ observations : "indicator_id"
-  districts ||--o{ observations : "district_id"
-  regions ||--o{ observations : "region_id"
   data_sources ||--o{ observations : "source_id"
+  regions ||--o{ observations : "region_id"
+  districts ||--o{ observations : "district_id"
   data_sources ||--o{ ingestion_runs : "source_id"
   regions ||--o{ features : "region_id"
   districts ||--o{ features : "district_id"
@@ -284,6 +286,7 @@ Constraints: unique (soato_code) · index (region_id)
 | `higher_is_better` | boolean | no |  |
 | `siat_dataset_id` | integer | yes |  |
 | `source_name` | text | yes |  |
+| `auto_added` | boolean | no |  |
 
 Constraints: unique (code)
 
@@ -309,7 +312,7 @@ Constraints: unique (code)
 | `is_synthetic` | boolean | no |  |
 | `ingested_at` | datetime | no |  |
 
-Constraints: unique (indicator_id, level, region_id, district_id, year, quarter, month, source_id) · index (region_id) · index (district_id) · index (indicator_id, level, year)
+Constraints: unique (indicator_id, level, region_id, district_id, year, quarter, month, source_id) · index (district_id) · index (indicator_id, level, year) · index (region_id)
 
 ### `ingestion_runs`
 
@@ -362,7 +365,7 @@ Constraints: unique (name, level, region_id, district_id, year) · index (name, 
 | `result` | json | no |  |
 | `created_at` | datetime | no |  |
 
-Constraints: index (request_id) · index (business_type)
+Constraints: index (business_type) · index (request_id)
 
 ### `predictions`
 
@@ -430,7 +433,7 @@ Constraints: index (kind, created_at)
 | `verification_failures` | integer | no |  |
 | `answer` | text | yes |  |
 
-Constraints: index (created_at) · index (request_id)
+Constraints: index (request_id) · index (created_at)
 
 ### `agent_tool_calls`
 
@@ -487,6 +490,7 @@ Constraints: index (doc_id)
 | `status` | varchar(16) | no |  |
 | `datasets_checked` | integer | no |  |
 | `datasets_changed` | json | yes |  |
+| `datasets_added` | json | yes |  |
 | `steps` | json | yes |  |
 | `error` | text | yes |  |
 

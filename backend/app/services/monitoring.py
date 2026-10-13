@@ -72,6 +72,7 @@ def pipeline_status(db: Session) -> dict:
                 "trigger": r.trigger,
                 "status": r.status,
                 "datasets_changed": r.datasets_changed or [],
+                "datasets_added": r.datasets_added or [],
                 "steps": r.steps or [],
                 "error": r.error,
             }

@@ -60,9 +60,10 @@ With Docker: `docker compose up -d --build` then `docker compose run --rm worker
 
 ## Automatic data refresh
 
-`python manage.py schedule` downloads new SIAT data every 3 days at 03:00 (Windows Task Scheduler; the
-Docker stack has a `scheduler` service) and rebuilds features, forecasts and the search index only when
-something changed. Runs are listed on the Monitoring page. See [docs/runbook.md](docs/runbook.md).
+`python manage.py schedule` checks SIAT **every week** at 03:00 (Windows Task Scheduler; the Docker stack has a
+`scheduler` service): new years of existing datasets are loaded, **newly published datasets are mapped
+automatically into the same schema** (flagged "auto-added"), and features, forecasts and the search index are
+rebuilt only when something changed. Runs are listed on the Monitoring page. See [docs/runbook.md](docs/runbook.md).
 
 ## Commands
 

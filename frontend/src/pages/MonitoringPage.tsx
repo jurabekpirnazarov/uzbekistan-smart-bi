@@ -99,7 +99,8 @@ export function MonitoringPage() {
                 <th scope="col">Started</th>
                 <th scope="col">Trigger</th>
                 <th scope="col">Status</th>
-                <th scope="col">New SIAT datasets</th>
+                <th scope="col">Updated datasets</th>
+                <th scope="col">Newly added</th>
                 <th scope="col">Steps</th>
               </tr>
             </thead>
@@ -111,6 +112,7 @@ export function MonitoringPage() {
                     <td>{r.trigger}</td>
                     <td title={r.error ?? ""}>{STATUS_LABEL[r.status] ?? r.status}</td>
                     <td>{r.datasets_changed.length ? r.datasets_changed.join(", ") : "none"}</td>
+                    <td>{r.datasets_added?.length ? r.datasets_added.map((a) => a.name_en).join("; ") : "—"}</td>
                     <td className="muted">
                       {r.steps.map((s) => `${s.name}${s.status === "ok" ? "" : ` (${s.status})`}`).join(" → ")}
                     </td>
@@ -118,7 +120,7 @@ export function MonitoringPage() {
                 ))
               ) : (
                 <tr>
-                  <td colSpan={5} className="muted">
+                  <td colSpan={6} className="muted">
                     No runs yet.
                   </td>
                 </tr>

@@ -46,6 +46,8 @@ class IndicatorSpec(BaseModel):
     frequency: str = "annual"
     additive: bool
     higher_is_better: bool = True
+    auto_added: bool = False  # mapped automatically by pipelines/discover.py (not reviewed, not scored)
+    added_at: str | None = None
 
 
 class IndicatorMap(BaseModel):
@@ -53,8 +55,20 @@ class IndicatorMap(BaseModel):
     reference: dict[str, dict[str, int]] = {}
 
 
+AUTO_MAP_NAME = "indicator_map.auto.yaml"
+
+
 def load_map(path: Path) -> IndicatorMap:
+    """The curated map plus, if present next to it, the auto-discovered map (curated entries win)."""
     m = IndicatorMap.model_validate(yaml.safe_load(path.read_text(encoding="utf-8")))
+    auto_path = path.with_name(AUTO_MAP_NAME)
+    if auto_path.exists():
+        auto = yaml.safe_load(auto_path.read_text(encoding="utf-8")) or {}
+        curated_ids = {s.siat_dataset_id for s in m.indicators.values()}
+        for code, spec in (auto.get("indicators") or {}).items():
+            spec = IndicatorSpec.model_validate({**spec, "auto_added": True})
+            if code not in m.indicators and spec.siat_dataset_id not in curated_ids:
+                m.indicators[code] = spec
     ids = [s.siat_dataset_id for s in m.indicators.values()]
     dupes = {i for i in ids if ids.count(i) > 1}
     if dupes:
@@ -200,6 +214,7 @@ def load(data_dir: Path, map_path: Path) -> dict:
                     "frequency": s.frequency,
                     "additive": s.additive,
                     "higher_is_better": s.higher_is_better,
+                    "auto_added": s.auto_added,
                     "siat_dataset_id": s.siat_dataset_id,
                     "source_name": clean(meta.loc[s.siat_dataset_id, "name_en"])
                     if s.siat_dataset_id in meta.index

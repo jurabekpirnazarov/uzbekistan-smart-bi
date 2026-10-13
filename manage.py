@@ -433,7 +433,7 @@ def _settings_value(key: str, default: str) -> str:
 
 @app.command()
 def schedule(
-    every_days: int = typer.Option(None, help="days between refreshes (default REFRESH_EVERY_DAYS from .env, 3)"),
+    every_days: int = typer.Option(None, help="days between refreshes (default REFRESH_EVERY_DAYS from .env, 7)"),
     at: str = typer.Option(None, help="local time HH:MM (default REFRESH_AT from .env, 03:00)"),
     remove: bool = typer.Option(False, "--remove", help="delete the scheduled task"),
     status: bool = typer.Option(False, "--status", help="show the scheduled task"),
@@ -466,7 +466,7 @@ def schedule(
             check=False,
         )
         return
-    days = every_days or int(_settings_value("REFRESH_EVERY_DAYS", "3"))
+    days = every_days or int(_settings_value("REFRESH_EVERY_DAYS", "7"))
     time_at = at or _settings_value("REFRESH_AT", "03:00")
     # StartWhenAvailable: if the computer was off at the scheduled time, run as soon as it is on again.
     script = (

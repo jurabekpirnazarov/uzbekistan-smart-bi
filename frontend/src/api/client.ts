@@ -35,6 +35,7 @@ export interface Indicator {
   year_max: number | null;
   source_name: string | null;
   siat_dataset_id: number | null;
+  auto_added?: boolean;
 }
 
 export interface Region {
@@ -250,6 +251,7 @@ export interface PipelineRunRow {
   trigger: string;
   status: "running" | "ok" | "no_change" | "failed";
   datasets_changed: number[];
+  datasets_added: { dataset_id: number; code: string; name_en: string; unit: string }[];
   steps: { name: string; status: string; seconds: number; reason?: string }[];
   error: string | null;
 }

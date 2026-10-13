@@ -35,10 +35,21 @@ STALE_LOCK_HOURS = 6
 
 
 def mapped_ids() -> list[int]:
-    m = yaml.safe_load((ROOT / "data" / "reference" / "indicator_map.yaml").read_text(encoding="utf-8"))
-    ids = [s["siat_dataset_id"] for s in m["indicators"].values()]
-    ids += [r["siat_dataset_id"] for r in (m.get("reference") or {}).values()]
+    """Curated + auto-discovered datasets (indicator_map.yaml and indicator_map.auto.yaml)."""
+    ids: list[int] = []
+    for name in ("indicator_map.yaml", "indicator_map.auto.yaml"):
+        path = ROOT / "data" / "reference" / name
+        if not path.exists():
+            continue
+        m = yaml.safe_load(path.read_text(encoding="utf-8")) or {}
+        ids += [s["siat_dataset_id"] for s in (m.get("indicators") or {}).values()]
+        ids += [r["siat_dataset_id"] for r in (m.get("reference") or {}).values()]
     return sorted(set(ids))
+
+
+def discovered() -> list[dict]:
+    path = ROOT / "data" / "processed" / "discover_last.json"
+    return json.loads(path.read_text(encoding="utf-8")).get("added", []) if path.exists() else []
 
 
 def fingerprints(ids: list[int]) -> dict[int, str | None]:
@@ -117,8 +128,15 @@ def run(force: bool = False, trigger: str = "manual") -> int:
         db.add(row)
         db.commit()
         run_id = row.id
-    status, error, changed = "failed", None, []
+    status, error, changed, added = "failed", None, [], []
     try:
+        # 1. new datasets published on SIAT → auto-map the safe ones into the same schema
+        r.step("catalog", ["pipelines/siat_ingest.py", "catalog", "--refresh"])
+        r.step("discover", ["pipelines/discover.py"])
+        added = discovered()
+        r.say(f"new SIAT datasets mapped: {[a['code'] for a in added] or 'none'}")
+        ids = mapped_ids()
+        # 2. new values (years) in every mapped dataset
         before = fingerprints(ids)
         r.step("download", ["pipelines/siat_ingest.py", "fetch", "--ids", *map(str, ids)])
         after = fingerprints(ids)
@@ -126,6 +144,9 @@ def run(force: bool = False, trigger: str = "manual") -> int:
         r.say(f"datasets with new content: {changed or 'none'}")
         r.step("migrate", ["-m", "alembic", "-c", "backend/alembic.ini", "upgrade", "head"])
         r.step("load", ["pipelines/load_siat.py"])
+        # 3. territories that appeared in the data (e.g. a newly created district) get a location
+        r.step("geography", ["pipelines/load_reference.py"])
+        changed = sorted(set(changed) | {a["dataset_id"] for a in added})
         if changed or force:
             r.step("features", ["-m", "ml.features.pipeline"])
             r.step("train", ["-m", "ml.forecasting.train"])
@@ -145,6 +166,8 @@ def run(force: bool = False, trigger: str = "manual") -> int:
                 row.finished_at = datetime.now(UTC)
                 row.status = status
                 row.datasets_changed = changed
+                row.datasets_added = added
+                row.datasets_checked = len(mapped_ids())
                 row.steps = r.steps
                 row.error = error
                 db.commit()

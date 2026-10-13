@@ -587,6 +587,7 @@ def detect_language(text: str) -> str:
 def build_system_prompt(db: Session) -> str:
     inds = "\n".join(
         f"- {i.code}: {i.name_en} [{i.unit}; levels: {', '.join(i.levels)}; years {i.year_min}–{i.year_max}]"
+        + (" (new, auto-added: mention that it was added automatically)" if i.auto_added else "")
         for i in stats.list_indicators(db)
     )
     regs = "\n".join(f"- {r.soato}: {r.name_en} / {r.name_uz}" for r in stats.list_regions(db))

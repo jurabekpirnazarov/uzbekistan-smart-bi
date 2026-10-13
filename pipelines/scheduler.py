@@ -1,7 +1,7 @@
 """Long-running scheduler for servers / Docker: runs pipelines/refresh.py every N days at a fixed time.
 
 Usage:  python manage.py scheduler            (the `scheduler` service in docker-compose.yml)
-Config: REFRESH_EVERY_DAYS (default 3) and REFRESH_AT (local time HH:MM, default 03:00) in .env.
+Config: REFRESH_EVERY_DAYS (default 7) and REFRESH_AT (local time HH:MM, default 03:00) in .env.
 
 The next run is computed from the last successful run in `pipeline_runs`, so restarting the container
 does not trigger an extra download; a missed run (machine was off) starts right away.

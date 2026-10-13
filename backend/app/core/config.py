@@ -28,7 +28,7 @@ class Settings(BaseSettings):
     otel_enabled: bool = False
 
     # scheduled data refresh (pipelines/refresh.py)
-    refresh_every_days: int = 3
+    refresh_every_days: int = 7
     refresh_at: str = "03:00"  # local time HH:MM
 
     cors_origins: list[str] = ["http://localhost:5173", "http://localhost:5174", "http://localhost:8080"]

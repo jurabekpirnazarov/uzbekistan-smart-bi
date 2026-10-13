@@ -98,6 +98,7 @@ export function AnalyticsPage() {
                 {list.map((i) => (
                   <option key={i.code} value={i.code}>
                     {i.name_en}
+                    {i.auto_added ? " · new (auto-added)" : ""}
                   </option>
                 ))}
               </optgroup>
@@ -146,6 +147,12 @@ export function AnalyticsPage() {
         </label>
       </section>
 
+      {current?.auto_added && (
+        <div className="banner warn">
+          New SIAT dataset, added automatically by the weekly refresh. Units were normalised automatically; it is
+          not used in the Business Opportunity Score until reviewed.
+        </div>
+      )}
       {error && <div className="alert">{error}</div>}
 
       <div className="grid">

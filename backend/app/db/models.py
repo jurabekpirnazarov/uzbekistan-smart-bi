@@ -81,6 +81,8 @@ class Indicator(Base):
     higher_is_better: Mapped[bool] = mapped_column(Boolean, default=True)
     siat_dataset_id: Mapped[int | None] = mapped_column(Integer)
     source_name: Mapped[str | None] = mapped_column(Text)  # dataset name as published by SIAT
+    # True when pipelines/discover.py mapped a newly published SIAT dataset (not reviewed, not used in scoring)
+    auto_added: Mapped[bool] = mapped_column(Boolean, default=False, server_default="false")
 
 
 class Observation(Base):
@@ -311,5 +313,6 @@ class PipelineRun(Base):
     status: Mapped[str] = mapped_column(String(16))  # running | ok | no_change | failed
     datasets_checked: Mapped[int] = mapped_column(Integer, default=0)
     datasets_changed: Mapped[list | None] = mapped_column(JSON)  # SIAT dataset ids with new content
+    datasets_added: Mapped[list | None] = mapped_column(JSON)  # newly published datasets mapped automatically
     steps: Mapped[list | None] = mapped_column(JSON)  # [{name, status, seconds}]
     error: Mapped[str | None] = mapped_column(Text)

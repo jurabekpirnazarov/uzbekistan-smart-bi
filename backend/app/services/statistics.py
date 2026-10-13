@@ -52,6 +52,7 @@ class IndicatorOut(BaseModel):
     year_max: int | None
     source_name: str | None
     siat_dataset_id: int | None
+    auto_added: bool = False  # newly published SIAT dataset mapped automatically (not reviewed, not scored)
 
 
 class RegionOut(BaseModel):
@@ -192,6 +193,7 @@ def list_indicators(db: Session, category: str | None = None) -> list[IndicatorO
             year_max=y1,
             source_name=i.source_name,
             siat_dataset_id=i.siat_dataset_id,
+            auto_added=bool(i.auto_added),
         )
         for i, levels, y0, y1 in db.execute(q).all()
     ]
