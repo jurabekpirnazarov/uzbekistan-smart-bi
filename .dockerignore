@@ -6,5 +6,6 @@
 .ruff_cache
 frontend/node_modules
 frontend/dist
-data
+data/*
+!data/reference
 .env

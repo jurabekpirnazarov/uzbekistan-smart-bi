@@ -47,8 +47,21 @@ python manage.py demo        # ingest → geography + RAG → features → train
 python manage.py dev         # http://localhost:5174
 ```
 
-With Docker: `docker compose up -d --build` then `docker compose run --rm worker python manage.py demo`
-→ http://localhost:8080. Full instructions are in [docs/runbook.md](docs/runbook.md).
+## Quick start (any computer with Docker Desktop)
+
+Only Git and Docker Desktop are needed; Python, Node and PostgreSQL run inside the containers.
+
+```powershell
+git clone https://github.com/jurabekpirnazarov/uzbekistan-smart-bi.git
+cd uzbekistan-smart-bi
+copy .env.example .env                                   # optional: OPENAI_API_KEY=...
+docker compose up -d --build                             # db, API, MCP, frontend, MLflow, Grafana, Prometheus
+docker compose run --rm worker python manage.py demo     # first run only: SIAT download → features → forecasts
+```
+
+→ http://localhost:8080. The first `demo` needs internet access (siat.stat.uz and GitHub for boundaries) and
+takes a few minutes; data is kept in the `pgdata` Docker volume and in `data/`. Full instructions:
+[docs/runbook.md](docs/runbook.md).
 
 | URL | What |
 |---|---|
